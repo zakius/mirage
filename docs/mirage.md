@@ -8,6 +8,10 @@ The plugin talks to any Subsonic or OpenSubsonic server through the standard API
 Server-specific behaviour (for example oasis merging a local library with a streaming service) stays on the server
 and is invisible to the client.
 
+mirage is Subsonic only: its library consists of Subsonic servers, never folders, and its playlists live on the
+server. Single files can still be opened or dropped onto a playlist. It runs as "mirage" with its own configuration,
+database and MPRIS name, so it does not touch a fooyin install on the same machine.
+
 The work has two layers:
 
 1. A small, generic **library provider** API in fooyin core. It lets a plugin own a library that is not a folder.
@@ -159,6 +163,11 @@ Subsonic API documentation.
   Edits in fooyin go back to the server one second after the last change: track changes through `createPlaylist` with
   `playlistId` (which replaces the entries), renames through `updatePlaylist`, and removal through `deletePlaylist`.
   A playlist with unsent edits is not overwritten by a sync. The last write wins.
+- **New playlists.** Every new normal playlist is created on the default server (the Subsonic library with the lowest
+  id) with `createPlaylist` and linked through the returned id; for servers older than API 1.14, which return nothing,
+  it is found by name. After each sync, playlists that are still unlinked (made before a server was added, or whose
+  upload failed) are uploaded. Temporary playlists and autoplaylists stay local, because Subsonic cannot store
+  autoplaylist queries.
 - **Accounts.** The settings page lists the servers. Selecting one edits its name, URL, user name or password; an empty
   password keeps the stored one. The library path stays the same, so tracks, statistics and playlists are kept when
   the server moves.
@@ -172,8 +181,10 @@ Subsonic API documentation.
 
 - `library-providers`, on `master`: only the generic API commits, each tagged `[core]`, `[gui]` or `[scrobbler]` as
   in upstream, kept as a small series that rebases onto upstream `master` (see "Keeping the fork rebased").
-- `mirage`, on `library-providers`: this document and the Subsonic plugin (`[subsonic]` commits). Rebase it when the
-  API branch changes.
+- `mirage`, on `library-providers`: this document, the Subsonic plugin (`[subsonic]` commits) and two small
+  `[mirage]` commits: the application name and profile, and Subsonic-only libraries (`LibraryManager` refuses folder
+  paths; the library settings page hides folder settings and sends "Add" to the Subsonic page). Rebase it when the API
+  branch changes.
 
 ## Order of work
 
@@ -202,7 +213,8 @@ they rebase easily:
 
 - `library-providers` is a short series on top of upstream `master` (about 420 changed lines in `src` and `include`,
   plus tests). It adds one header and one source file and touches existing files only at narrow points.
-- `mirage` adds the plugin in its own directory; outside it, only `src/plugins/CMakeLists.txt` changes.
+- `mirage` adds the plugin in its own directory. Outside it, it changes `src/plugins/CMakeLists.txt` and a few lines
+  for the application name, the library settings page and `LibraryManager::addLibrary()`.
 
 To update:
 
@@ -234,10 +246,16 @@ plays to a PulseAudio null sink. Fault cases used a proxy in front of oasis.
 - Server playlists appear in fooyin. Adding, removing and renaming in fooyin reach the server, and removing the
   playlist in fooyin deletes it on the server. Playlists deleted on the server disappear from fooyin.
 - Library and playlist entries survive a restart.
+- mirage runs with its own profile (`~/.config/mirage`, `~/.local/share/mirage`, `~/.local/state/mirage`) and MPRIS name
+  `org.mpris.MediaPlayer2.mirage`.
+- Folder libraries cannot be added; "Add" on the library page opens the Subsonic page.
+- A playlist that existed before the server was added, a new empty playlist, a playlist created from a library
+  selection, and tracks added later all reach the server. A restart does not upload them again.
 
 Limits:
 
-- Only playlists that came from a server sync back. A new fooyin playlist stays local.
+- New playlists go to the default server. Moving a playlist to another server is not supported.
+- Autoplaylists stay local (not tested end to end).
 - Tracks that are not on the playlist's server (local files, other servers) stay in the fooyin playlist but are not
   sent.
 - Playlist conflicts resolve by last write.
