@@ -25,6 +25,7 @@
 #include <QDateTime>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QMetaEnum>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QRandomGenerator>
@@ -107,20 +108,31 @@ void request(QNetworkAccessManager* network, const Account& account, const QStri
         reply->deleteLater();
 
         if(reply->error() != QNetworkReply::NoError) {
-            callback({}, reply->errorString());
+            callback({}, {.message = replyError(reply)});
             return;
         }
 
         const QJsonObject response
             = QJsonDocument::fromJson(reply->readAll()).object().value("subsonic-response"_L1).toObject();
         if(response.value("status"_L1).toString() != "ok"_L1) {
-            const QString error = response.value("error"_L1).toObject().value("message"_L1).toString();
-            callback({}, error.isEmpty() ? u"Invalid server response"_s : error);
+            const QJsonObject error = response.value("error"_L1).toObject();
+            const QString message   = error.value("message"_L1).toString();
+            callback({}, {.code    = error.value("code"_L1).toInt(-1),
+                          .message = message.isEmpty() ? u"Invalid server response"_s : message});
             return;
         }
 
         callback(response, {});
     });
+}
+
+QString replyError(const QNetworkReply* reply)
+{
+    const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+    if(status > 0) {
+        return u"HTTP %1 %2"_s.arg(status).arg(reply->attribute(QNetworkRequest::HttpReasonPhraseAttribute).toString());
+    }
+    return QString::fromLatin1(QMetaEnum::fromType<QNetworkReply::NetworkError>().valueToKey(reply->error()));
 }
 
 QJsonArray toArray(const QJsonValue& value)

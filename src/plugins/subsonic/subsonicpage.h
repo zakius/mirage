@@ -23,6 +23,7 @@
 
 namespace Fooyin {
 class LibraryManager;
+class MusicLibrary;
 class SettingsManager;
 
 namespace Subsonic {
@@ -33,8 +34,8 @@ class SubsonicPage : public SettingsPage
     Q_OBJECT
 
 public:
-    SubsonicPage(SubsonicProvider* provider, LibraryManager* libraryManager, SettingsManager* settings,
-                 QObject* parent = nullptr);
+    SubsonicPage(SubsonicProvider* provider, LibraryManager* libraryManager, MusicLibrary* library,
+                 SettingsManager* settings, QObject* parent = nullptr);
 };
 } // namespace Subsonic
 } // namespace Fooyin

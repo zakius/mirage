@@ -30,6 +30,7 @@
 #include <optional>
 
 class QNetworkAccessManager;
+class QNetworkReply;
 class QObject;
 
 namespace Fooyin::Subsonic {
@@ -40,8 +41,15 @@ struct Account
     QString password;
 };
 
-//! Receives the "subsonic-response" object of a successful call, or std::nullopt and an error message.
-using ResponseCallback = std::function<void(std::optional<QJsonObject> response, QString error)>;
+struct ApiError
+{
+    //! Subsonic error code, or -1 for network and protocol errors.
+    int code{-1};
+    QString message;
+};
+
+//! Receives the "subsonic-response" object of a successful call, or std::nullopt and the error.
+using ResponseCallback = std::function<void(std::optional<QJsonObject> response, ApiError error)>;
 
 //! Returns the authenticated URL of the API @p method. Each call uses a new salt.
 [[nodiscard]] QUrl apiUrl(const Account& account, const QString& method, QUrlQuery params = {});
@@ -49,6 +57,9 @@ using ResponseCallback = std::function<void(std::optional<QJsonObject> response,
 //! Calls the API @p method and invokes @p callback in the thread of @p context.
 void request(QNetworkAccessManager* network, const Account& account, const QString& method, const QUrlQuery& params,
              QObject* context, ResponseCallback callback);
+
+//! Describes a failed reply without its URL, which contains the authentication token.
+[[nodiscard]] QString replyError(const QNetworkReply* reply);
 
 //! Returns a JSON value as an array; servers may send a single object in place of a one-element array.
 [[nodiscard]] QJsonArray toArray(const QJsonValue& value);

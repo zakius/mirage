@@ -31,7 +31,8 @@ struct RangeStreamState;
 
 /*!
  * A seekable read-only device for an HTTP resource. It fetches the resource in chunks with range requests and
- * prefetches the next chunk. If the server ignores range requests, the whole resource is downloaded once.
+ * prefetches the next chunks, retrying failed requests. If the server ignores range requests, the whole resource is
+ * downloaded once and read while it arrives.
  * Reads block until data arrives, so the device must not be read from the thread of the network manager.
  */
 class RangeStreamDevice : public QIODevice

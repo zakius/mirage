@@ -33,18 +33,26 @@
 #include <QDateTime>
 #include <QJsonArray>
 #include <QLoggingCategory>
+#include <QScopedValueRollback>
 
 Q_LOGGING_CATEGORY(SUBSONIC_PLUGIN, "fy.subsonic.plugin")
 
 using namespace Qt::StringLiterals;
+using namespace std::chrono_literals;
 
 constexpr auto PlaylistProperty = "SubsonicPlaylist";
 
 namespace {
-void logError(const QString& method, const std::optional<QJsonObject>& response, const QString& error)
+QString playlistKey(const Fooyin::Playlist* playlist)
+{
+    return playlist->extraProperties().value(QString::fromLatin1(PlaylistProperty));
+}
+
+void logError(const QString& method, const std::optional<QJsonObject>& response,
+              const Fooyin::Subsonic::ApiError& error)
 {
     if(!response) {
-        qCWarning(SUBSONIC_PLUGIN) << method << "failed:" << error;
+        qCWarning(SUBSONIC_PLUGIN) << method << "failed:" << error.message;
     }
 }
 } // namespace
@@ -92,6 +100,20 @@ void SubsonicPlugin::initialise(const CorePluginContext& context)
     // Playlists refer to library tracks, so they are synced once the fetched tracks have been applied
     QObject::connect(m_provider.get(), &SubsonicProvider::tracksFetched, this,
                      [this](const QString& libraryPath) { m_pendingPlaylistSyncs.emplace(libraryPath); });
+    // Local edits of mirrored playlists are sent back to the server
+    const auto markEdited = [this](Playlist* playlist) {
+        playlistEdited(playlist);
+    };
+    QObject::connect(m_playlistHandler, &PlaylistHandler::tracksAdded, this, markEdited);
+    QObject::connect(m_playlistHandler, &PlaylistHandler::tracksPatched, this, markEdited);
+    QObject::connect(m_playlistHandler, &PlaylistHandler::tracksChanged, this, markEdited);
+    QObject::connect(m_playlistHandler, &PlaylistHandler::tracksRemoved, this, markEdited);
+    QObject::connect(m_playlistHandler, &PlaylistHandler::playlistRenamed, this, markEdited);
+    QObject::connect(m_playlistHandler, &PlaylistHandler::playlistRemoved, this, &SubsonicPlugin::playlistRemoved);
+    m_pushTimer.setSingleShot(true);
+    m_pushTimer.setInterval(1s);
+    QObject::connect(&m_pushTimer, &QTimer::timeout, this, &SubsonicPlugin::pushPlaylists);
+
     QObject::connect(m_library, &MusicLibrary::scanFinished, this,
                      [this](int /*id*/, ScanRequest::Type type, bool cancelled) {
                          if(type != ScanRequest::Library || cancelled) {
@@ -105,7 +127,7 @@ void SubsonicPlugin::initialise(const CorePluginContext& context)
 
 void SubsonicPlugin::initialise(const GuiPluginContext& /*context*/)
 {
-    new SubsonicPage(m_provider.get(), m_libraryManager, m_settings, this);
+    new SubsonicPage(m_provider.get(), m_libraryManager, m_library, m_settings, this);
 }
 
 void SubsonicPlugin::scrobble(const Track& track, bool submission)
@@ -121,7 +143,7 @@ void SubsonicPlugin::scrobble(const Track& track, bool submission)
         params.addQueryItem(u"time"_s, QString::number(QDateTime::currentMSecsSinceEpoch()));
     }
 
-    m_provider->call(track.filepath(), u"scrobble"_s, params, [](std::optional<QJsonObject> response, QString error) {
+    m_provider->call(track.filepath(), u"scrobble"_s, params, [](std::optional<QJsonObject> response, ApiError error) {
         logError(u"scrobble"_s, response, error);
     });
 }
@@ -142,21 +164,85 @@ void SubsonicPlugin::writeStats(const TrackList& tracks, Track::Stats stats)
             ratingParams.addQueryItem(u"rating"_s, QString::number((track.ratingStars() + 1) / 2));
             m_provider->call(
                 track.filepath(), u"setRating"_s, ratingParams,
-                [](std::optional<QJsonObject> response, QString error) { logError(u"setRating"_s, response, error); });
+                [](std::optional<QJsonObject> response, ApiError error) { logError(u"setRating"_s, response, error); });
         }
         if(stats.testFlag(Track::Stat::Loved)) {
             const QString method = track.isLoved() ? u"star"_s : u"unstar"_s;
             m_provider->call(
                 track.filepath(), method, params,
-                [method](std::optional<QJsonObject> response, QString error) { logError(method, response, error); });
+                [method](std::optional<QJsonObject> response, ApiError error) { logError(method, response, error); });
         }
+    }
+}
+
+void SubsonicPlugin::playlistEdited(const Playlist* playlist)
+{
+    if(m_applyingServerChanges || !playlist) {
+        return;
+    }
+    if(const QString key = playlistKey(playlist); m_provider->isProviderPath(key)) {
+        m_dirtyPlaylists.emplace(key);
+        m_pushTimer.start();
+    }
+}
+
+void SubsonicPlugin::playlistRemoved(const Playlist* playlist)
+{
+    if(m_applyingServerChanges || !playlist) {
+        return;
+    }
+
+    const QString key = playlistKey(playlist);
+    if(!m_provider->isProviderPath(key)) {
+        return;
+    }
+    m_dirtyPlaylists.erase(key);
+
+    QUrlQuery params;
+    params.addQueryItem(u"id"_s, key.sliced(key.lastIndexOf('/'_L1) + 1));
+    m_provider->call(key, u"deletePlaylist"_s, params, [](std::optional<QJsonObject> response, ApiError error) {
+        logError(u"deletePlaylist"_s, response, error);
+    });
+}
+
+void SubsonicPlugin::pushPlaylists()
+{
+    for(const QString& key : std::exchange(m_dirtyPlaylists, {})) {
+        const auto playlists = m_playlistHandler->playlists();
+        const auto it = std::ranges::find_if(playlists,
+                                             [&key](const Playlist* playlist) { return playlistKey(playlist) == key; });
+        if(it == playlists.cend()) {
+            continue;
+        }
+
+        const QString serverId    = key.sliced(key.lastIndexOf('/'_L1) + 1);
+        const QString songsPrefix = key.left(key.lastIndexOf(u"/playlist/"_s)) + u"/song/"_s;
+
+        // createPlaylist with a playlist id replaces its entries; tracks from elsewhere cannot be added
+        QUrlQuery entries;
+        entries.addQueryItem(u"playlistId"_s, serverId);
+        for(const Track& track : (*it)->tracks()) {
+            if(track.filepath().startsWith(songsPrefix)) {
+                entries.addQueryItem(u"songId"_s, songId(track.filepath()));
+            }
+        }
+        m_provider->call(key, u"createPlaylist"_s, entries, [](std::optional<QJsonObject> response, ApiError error) {
+            logError(u"createPlaylist"_s, response, error);
+        });
+
+        QUrlQuery rename;
+        rename.addQueryItem(u"playlistId"_s, serverId);
+        rename.addQueryItem(u"name"_s, (*it)->name());
+        m_provider->call(key, u"updatePlaylist"_s, rename, [](std::optional<QJsonObject> response, ApiError error) {
+            logError(u"updatePlaylist"_s, response, error);
+        });
     }
 }
 
 void SubsonicPlugin::syncPlaylists(const QString& libraryPath)
 {
     m_provider->call(
-        libraryPath, u"getPlaylists"_s, {}, [this, libraryPath](std::optional<QJsonObject> response, QString error) {
+        libraryPath, u"getPlaylists"_s, {}, [this, libraryPath](std::optional<QJsonObject> response, ApiError error) {
             if(!response) {
                 logError(u"getPlaylists"_s, response, error);
                 return;
@@ -171,55 +257,63 @@ void SubsonicPlugin::syncPlaylists(const QString& libraryPath)
 
                 QUrlQuery params;
                 params.addQueryItem(u"id"_s, id);
-                m_provider->call(
-                    libraryPath, u"getPlaylist"_s, params,
-                    [this, libraryPath, key = QString{keyPrefix + id}](std::optional<QJsonObject> playlistResponse,
-                                                                       QString playlistError) {
-                        if(!playlistResponse) {
-                            logError(u"getPlaylist"_s, playlistResponse, playlistError);
-                            return;
-                        }
+                m_provider->call(libraryPath, u"getPlaylist"_s, params,
+                                 [this, libraryPath, key = QString{keyPrefix + id}](
+                                     std::optional<QJsonObject> playlistResponse, ApiError playlistError) {
+                                     if(!playlistResponse) {
+                                         logError(u"getPlaylist"_s, playlistResponse, playlistError);
+                                         return;
+                                     }
 
-                        const QJsonObject playlist = playlistResponse->value("playlist"_L1).toObject();
-                        const QString name         = playlist.value("name"_L1).toString();
+                                     const QJsonObject playlist = playlistResponse->value("playlist"_L1).toObject();
+                                     const QString name         = playlist.value("name"_L1).toString();
 
-                        std::unordered_map<QString, Track> tracksByPath;
-                        for(const Track& track : m_library->libraryTracks()) {
-                            tracksByPath.emplace(track.filepath(), track);
-                        }
+                                     std::unordered_map<QString, Track> tracksByPath;
+                                     for(const Track& track : m_library->libraryTracks()) {
+                                         tracksByPath.emplace(track.filepath(), track);
+                                     }
 
-                        TrackList tracks;
-                        for(const auto& entry : toArray(playlist.value("entry"_L1))) {
-                            const QString path = songToTrack(entry.toObject(), libraryPath).filepath();
-                            if(const auto it = tracksByPath.find(path); it != tracksByPath.cend()) {
-                                tracks.push_back(it->second);
-                            }
-                        }
+                                     TrackList tracks;
+                                     for(const auto& entry : toArray(playlist.value("entry"_L1))) {
+                                         const QString path = songToTrack(entry.toObject(), libraryPath).filepath();
+                                         if(const auto it = tracksByPath.find(path); it != tracksByPath.cend()) {
+                                             tracks.push_back(it->second);
+                                         }
+                                     }
 
-                        const auto playlists = m_playlistHandler->playlists();
-                        const auto existing  = std::ranges::find_if(playlists, [&key](const Playlist* candidate) {
-                            return candidate->extraProperties().value(QString::fromLatin1(PlaylistProperty)) == key;
-                        });
+                                     const auto playlists = m_playlistHandler->playlists();
+                                     const auto existing
+                                         = std::ranges::find_if(playlists, [&key](const Playlist* candidate) {
+                                               return playlistKey(candidate) == key;
+                                           });
 
-                        if(existing == playlists.cend()) {
-                            if(auto* created = m_playlistHandler->createNewPlaylist(name, tracks)) {
-                                created->setExtraProperty(QString::fromLatin1(PlaylistProperty), key);
-                            }
-                            return;
-                        }
+                                     // Local edits waiting to be sent win over the server state
+                                     if(m_dirtyPlaylists.contains(key)) {
+                                         return;
+                                     }
 
-                        if((*existing)->name() != name) {
-                            m_playlistHandler->renamePlaylist((*existing)->id(), name);
-                        }
-                        if((*existing)->tracks() != tracks) {
-                            m_playlistHandler->replacePlaylistTracks((*existing)->id(), tracks);
-                        }
-                    });
+                                     const QScopedValueRollback applying{m_applyingServerChanges, true};
+
+                                     if(existing == playlists.cend()) {
+                                         if(auto* created = m_playlistHandler->createNewPlaylist(name, tracks)) {
+                                             created->setExtraProperty(QString::fromLatin1(PlaylistProperty), key);
+                                         }
+                                         return;
+                                     }
+
+                                     if((*existing)->name() != name) {
+                                         m_playlistHandler->renamePlaylist((*existing)->id(), name);
+                                     }
+                                     if((*existing)->tracks() != tracks) {
+                                         m_playlistHandler->replacePlaylistTracks((*existing)->id(), tracks);
+                                     }
+                                 });
             }
 
             // Server playlists are mirrored, so playlists deleted on the server are removed
+            const QScopedValueRollback applying{m_applyingServerChanges, true};
             for(const Playlist* playlist : m_playlistHandler->playlists()) {
-                const QString key = playlist->extraProperties().value(QString::fromLatin1(PlaylistProperty));
+                const QString key = playlistKey(playlist);
                 if(key.startsWith(keyPrefix) && !serverKeys.contains(key)) {
                     m_playlistHandler->removePlaylist(playlist->id());
                 }

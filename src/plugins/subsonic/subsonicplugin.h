@@ -24,7 +24,13 @@
 #include <core/track.h>
 #include <gui/plugins/guiplugin.h>
 
+#include <QTimer>
+
 #include <set>
+
+namespace Fooyin {
+class Playlist;
+}
 
 namespace Fooyin::Subsonic {
 class SubsonicProvider;
@@ -46,6 +52,9 @@ private:
     void scrobble(const Track& track, bool submission);
     void writeStats(const TrackList& tracks, Track::Stats stats);
     void syncPlaylists(const QString& libraryPath);
+    void playlistEdited(const Playlist* playlist);
+    void playlistRemoved(const Playlist* playlist);
+    void pushPlaylists();
 
     LibraryManager* m_libraryManager{nullptr};
     MusicLibrary* m_library{nullptr};
@@ -53,5 +62,9 @@ private:
     SettingsManager* m_settings{nullptr};
     std::shared_ptr<SubsonicProvider> m_provider;
     std::set<QString> m_pendingPlaylistSyncs;
+    //! Mirrored playlists edited locally and not yet sent to the server.
+    std::set<QString> m_dirtyPlaylists;
+    QTimer m_pushTimer;
+    bool m_applyingServerChanges{false};
 };
 } // namespace Fooyin::Subsonic

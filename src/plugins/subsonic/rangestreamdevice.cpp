@@ -19,6 +19,8 @@
 
 #include "rangestreamdevice.h"
 
+#include "subsonicapi.h"
+
 #include <core/network/networkutils.h>
 
 #include <QLoggingCategory>
@@ -26,6 +28,7 @@
 #include <QNetworkReply>
 #include <QRegularExpression>
 #include <QThread>
+#include <QTimer>
 
 #include <condition_variable>
 #include <map>
@@ -39,8 +42,12 @@ using namespace Qt::StringLiterals;
 
 constexpr qint64 ChunkSize       = 1024 * 1024;
 constexpr qint64 ChunksAhead     = 2;
+constexpr int MaxAttempts        = 3;
+constexpr auto RetryDelay        = 1s;
 constexpr auto RequestTimeout    = 30s;
+constexpr int OkCode             = 200;
 constexpr int PartialContentCode = 206;
+constexpr auto WholeBodyProperty = "fyWholeBody";
 
 namespace Fooyin::Subsonic {
 struct RangeStreamState
@@ -50,12 +57,15 @@ struct RangeStreamState
 
     std::map<qint64, QByteArray> chunks;
     std::set<qint64> pending;
+    std::map<qint64, int> attempts;
+    //! Total size, or -1 while unknown.
     qint64 size{-1};
     QString error;
     bool closed{false};
 
-    //! Set when the server answered a range request with the whole resource.
+    //! Set when the server answered a range request with the whole resource, which is read while it downloads.
     bool wholeBody{false};
+    bool bodyComplete{false};
     QByteArray body;
 };
 
@@ -65,6 +75,91 @@ qint64 totalFromContentRange(const QByteArray& header)
     static const QRegularExpression regex{uR"(/(\d+)\s*$)"_s};
     const auto match = regex.match(QString::fromLatin1(header));
     return match.hasMatch() ? match.captured(1).toLongLong() : -1;
+}
+
+bool isWholeBody(const QNetworkReply* reply)
+{
+    return reply->property(WholeBodyProperty).toBool();
+}
+
+// Runs in the network thread
+void startChunkRequest(const std::shared_ptr<QNetworkAccessManager>& network, const QUrl& url,
+                       const std::shared_ptr<RangeStreamState>& state, qint64 chunk)
+{
+    QNetworkRequest request = makeNetworkRequest(url);
+    request.setRawHeader("Range", "bytes=" + QByteArray::number(chunk * ChunkSize) + "-"
+                                      + QByteArray::number(((chunk + 1) * ChunkSize) - 1));
+    request.setTransferTimeout(std::chrono::duration_cast<std::chrono::milliseconds>(RequestTimeout));
+
+    auto* reply = network->get(request);
+
+    QObject::connect(reply, &QNetworkReply::metaDataChanged, reply, [state, reply]() {
+        if(reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() != OkCode) {
+            return;
+        }
+
+        const std::scoped_lock lock{state->mutex};
+        if(state->wholeBody) {
+            return;
+        }
+        bool ok{false};
+        const qint64 length = reply->header(QNetworkRequest::ContentLengthHeader).toLongLong(&ok);
+        state->wholeBody    = true;
+        state->size         = ok ? length : -1;
+        state->chunks.clear();
+        reply->setProperty(WholeBodyProperty, true);
+    });
+    QObject::connect(reply, &QIODevice::readyRead, reply, [state, reply]() {
+        if(!isWholeBody(reply)) {
+            return;
+        }
+        {
+            const std::scoped_lock lock{state->mutex};
+            state->body.append(reply->readAll());
+        }
+        state->ready.notify_all();
+    });
+    QObject::connect(reply, &QNetworkReply::finished, reply, [network, url, state, reply, chunk]() {
+        reply->deleteLater();
+
+        const QByteArray data = reply->readAll();
+        const int status      = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        const bool failed     = reply->error() != QNetworkReply::NoError;
+        int attempt{0};
+        {
+            const std::scoped_lock lock{state->mutex};
+
+            if(failed && !isWholeBody(reply) && !state->closed && (attempt = ++state->attempts[chunk]) < MaxAttempts) {
+                qCInfo(SUBSONIC_STREAM) << "Retrying chunk" << chunk << "after error:" << replyError(reply);
+            }
+            else {
+                attempt = 0;
+                state->pending.erase(chunk);
+                state->attempts.erase(chunk);
+
+                if(failed) {
+                    state->error = replyError(reply);
+                }
+                else if(isWholeBody(reply)) {
+                    state->body.append(data);
+                    state->size         = state->body.size();
+                    state->bodyComplete = true;
+                }
+                else if(status == PartialContentCode) {
+                    if(const qint64 total = totalFromContentRange(reply->rawHeader("Content-Range")); total >= 0) {
+                        state->size = total;
+                    }
+                    state->chunks[chunk] = data;
+                }
+            }
+        }
+        state->ready.notify_all();
+
+        if(attempt > 0) {
+            QTimer::singleShot(RetryDelay * attempt, network.get(),
+                               [network, url, state, chunk]() { startChunkRequest(network, url, state, chunk); });
+        }
+    });
 }
 
 // Requires state->mutex
@@ -77,41 +172,8 @@ void fetchChunk(const std::shared_ptr<QNetworkAccessManager>& network, const QUr
     }
 
     state->pending.insert(chunk);
-
-    QMetaObject::invokeMethod(network.get(), [network, url, state, chunk]() {
-        QNetworkRequest request = makeNetworkRequest(url);
-        request.setRawHeader("Range", "bytes=" + QByteArray::number(chunk * ChunkSize) + "-"
-                                          + QByteArray::number(((chunk + 1) * ChunkSize) - 1));
-        request.setTransferTimeout(std::chrono::duration_cast<std::chrono::milliseconds>(RequestTimeout));
-
-        auto* reply = network->get(request);
-        QObject::connect(reply, &QNetworkReply::finished, reply, [state, reply, chunk]() {
-            reply->deleteLater();
-            const QByteArray data = reply->readAll();
-            const int status      = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-            {
-                const std::scoped_lock lock{state->mutex};
-                state->pending.erase(chunk);
-
-                if(reply->error() != QNetworkReply::NoError) {
-                    state->error = reply->errorString();
-                }
-                else if(status == PartialContentCode) {
-                    if(const qint64 total = totalFromContentRange(reply->rawHeader("Content-Range")); total >= 0) {
-                        state->size = total;
-                    }
-                    state->chunks[chunk] = data;
-                }
-                else {
-                    state->wholeBody = true;
-                    state->body      = data;
-                    state->size      = data.size();
-                    state->chunks.clear();
-                }
-            }
-            state->ready.notify_all();
-        });
-    });
+    QMetaObject::invokeMethod(network.get(),
+                              [network, url, state, chunk]() { startChunkRequest(network, url, state, chunk); });
 }
 } // namespace
 
@@ -142,8 +204,9 @@ bool RangeStreamDevice::open(OpenMode mode)
     m_state->closed = false;
     fetchChunk(m_network, m_url, m_state, 0);
 
-    const bool answered = m_state->ready.wait_for(lock, RequestTimeout,
-                                                  [this]() { return m_state->size >= 0 || !m_state->error.isEmpty(); });
+    const bool answered = m_state->ready.wait_for(lock, RequestTimeout, [this]() {
+        return m_state->size >= 0 || !m_state->body.isEmpty() || m_state->bodyComplete || !m_state->error.isEmpty();
+    });
     if(!answered || !m_state->error.isEmpty()) {
         const QString error = answered ? m_state->error : tr("Timed out");
         qCWarning(SUBSONIC_STREAM) << "Failed to open stream:" << error;
@@ -177,50 +240,58 @@ bool RangeStreamDevice::isSequential() const
 qint64 RangeStreamDevice::size() const
 {
     const std::scoped_lock lock{m_state->mutex};
-    return std::max<qint64>(m_state->size, 0);
+    return std::max<qint64>(m_state->size, m_state->body.size());
 }
 
 bool RangeStreamDevice::atEnd() const
 {
-    return pos() >= size();
+    const std::scoped_lock lock{m_state->mutex};
+    const bool sizeKnown = m_state->wholeBody ? m_state->bodyComplete : m_state->size >= 0;
+    return sizeKnown && pos() >= std::max<qint64>(m_state->size, m_state->body.size());
 }
 
 qint64 RangeStreamDevice::readData(char* data, qint64 maxSize)
 {
     const qint64 position = pos();
+    const qint64 chunk    = position / ChunkSize;
 
     std::unique_lock lock{m_state->mutex};
-    if(position >= m_state->size) {
-        return 0;
+    if(!m_state->wholeBody) {
+        if(m_state->size >= 0 && position >= m_state->size) {
+            return 0;
+        }
+        for(qint64 ahead{0}; ahead <= ChunksAhead; ++ahead) {
+            fetchChunk(m_network, m_url, m_state, chunk + ahead);
+        }
     }
 
-    if(m_state->wholeBody) {
-        const qint64 count = std::min(maxSize, m_state->size - position);
-        std::memcpy(data, m_state->body.constData() + position, static_cast<size_t>(count));
-        return count;
-    }
-
-    const qint64 chunk = position / ChunkSize;
-    for(qint64 ahead{0}; ahead <= ChunksAhead; ++ahead) {
-        fetchChunk(m_network, m_url, m_state, chunk + ahead);
-    }
-
-    const bool ready = m_state->ready.wait_for(lock, RequestTimeout, [this, chunk]() {
-        return m_state->closed || m_state->wholeBody || m_state->chunks.contains(chunk) || !m_state->error.isEmpty();
+    // Seeks past the downloaded part of a whole body wait for the download to get there
+    const bool ready = m_state->ready.wait_for(lock, RequestTimeout, [this, chunk, position]() {
+        if(m_state->closed || !m_state->error.isEmpty()) {
+            return true;
+        }
+        if(m_state->wholeBody) {
+            return m_state->bodyComplete || m_state->body.size() > position;
+        }
+        return m_state->chunks.contains(chunk);
     });
     if(!ready || m_state->closed || !m_state->error.isEmpty()) {
         setErrorString(ready ? m_state->error : tr("Timed out"));
         return -1;
     }
 
+    if(m_state->wholeBody) {
+        const qint64 count = std::min(maxSize, m_state->body.size() - position);
+        if(count <= 0) {
+            return 0;
+        }
+        std::memcpy(data, m_state->body.constData() + position, static_cast<size_t>(count));
+        return count;
+    }
+
     // Keep the chunk before the read position for decoders that step back, and the prefetched chunks after it
     std::erase_if(m_state->chunks,
                   [chunk](const auto& entry) { return entry.first < chunk - 1 || entry.first > chunk + ChunksAhead; });
-
-    if(m_state->wholeBody) {
-        lock.unlock();
-        return readData(data, maxSize);
-    }
 
     const QByteArray& chunkData = m_state->chunks.at(chunk);
     const qint64 offset         = position - (chunk * ChunkSize);

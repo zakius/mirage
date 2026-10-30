@@ -67,13 +67,15 @@ public:
     //! Calls @p method on the server of @p account.
     void call(const Account& account, const QString& method, const QUrlQuery& params, ResponseCallback callback);
 
+    //! Returns the account of the server owning @p path, a library, track or artwork path.
+    [[nodiscard]] std::optional<Account> accountForPath(const QString& path) const;
+
 Q_SIGNALS:
     //! Emitted when the complete track list of the library at @p libraryPath has been fetched.
     void tracksFetched(const QString& libraryPath);
 
 private:
     void finishSync(const std::shared_ptr<SyncState>& state);
-    [[nodiscard]] std::optional<Account> accountForPath(const QString& path) const;
 
     void fetchSongs(const std::shared_ptr<SyncState>& state, int offset);
     void fetchAlbumList(const std::shared_ptr<SyncState>& state, int offset);

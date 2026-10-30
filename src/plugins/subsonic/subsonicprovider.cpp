@@ -34,6 +34,8 @@ using namespace Qt::StringLiterals;
 
 constexpr auto Scheme   = "subsonic";
 constexpr auto PageSize = 500;
+//! Subsonic error code for a missing or empty required parameter.
+constexpr int MissingParameterCode = 10;
 
 constexpr auto UrlField      = "Url";
 constexpr auto UsernameField = "Username";
@@ -184,7 +186,7 @@ void SubsonicProvider::call(const QString& path, const QString& method, const QU
         call(*account, method, params, std::move(callback));
     }
     else {
-        callback({}, tr("No account for %1").arg(path));
+        callback({}, {.message = tr("No account for %1").arg(path)});
     }
 }
 
@@ -223,15 +225,15 @@ void SubsonicProvider::fetchSongs(const std::shared_ptr<SyncState>& state, int o
     params.addQueryItem(u"songOffset"_s, QString::number(offset));
 
     call(state->account, u"search3"_s, params,
-         [this, state, offset](std::optional<QJsonObject> response, QString error) {
+         [this, state, offset](std::optional<QJsonObject> response, ApiError error) {
              if(!response) {
-                 if(offset == 0) {
+                 if(offset == 0 && error.code == MissingParameterCode) {
                      // Not every server lists all songs for an empty query
-                     qCInfo(SUBSONIC) << "search3 failed, listing albums instead:" << error;
+                     qCInfo(SUBSONIC) << "search3 failed, listing albums instead:" << error.message;
                      fetchAlbumList(state, 0);
                  }
                  else {
-                     qCWarning(SUBSONIC) << "Failed to list songs:" << error;
+                     qCWarning(SUBSONIC) << "Failed to list songs:" << error.message;
                      state->callback({});
                  }
                  return;
@@ -262,9 +264,9 @@ void SubsonicProvider::fetchAlbumList(const std::shared_ptr<SyncState>& state, i
     params.addQueryItem(u"offset"_s, QString::number(offset));
 
     call(state->account, u"getAlbumList2"_s, params,
-         [this, state, offset](std::optional<QJsonObject> response, QString error) {
+         [this, state, offset](std::optional<QJsonObject> response, ApiError error) {
              if(!response) {
-                 qCWarning(SUBSONIC) << "Failed to list albums:" << error;
+                 qCWarning(SUBSONIC) << "Failed to list albums:" << error.message;
                  state->callback({});
                  return;
              }
@@ -294,9 +296,9 @@ void SubsonicProvider::fetchNextAlbum(const std::shared_ptr<SyncState>& state)
     params.addQueryItem(u"id"_s, state->albumIds.front());
     state->albumIds.pop_front();
 
-    call(state->account, u"getAlbum"_s, params, [this, state](std::optional<QJsonObject> response, QString error) {
+    call(state->account, u"getAlbum"_s, params, [this, state](std::optional<QJsonObject> response, ApiError error) {
         if(!response) {
-            qCWarning(SUBSONIC) << "Failed to fetch album:" << error;
+            qCWarning(SUBSONIC) << "Failed to fetch album:" << error.message;
             state->callback({});
             return;
         }
