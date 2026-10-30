@@ -87,7 +87,8 @@ QString userPluginsPath()
         return Utils::createPath(Utils::File::cleanPath(
             u"%1/.var/app/org.fooyin.fooyin/.local/lib/fooyin/plugins/"_s.arg(QDir::homePath())));
     }
-    return Utils::createPath(Utils::File::cleanPath(u"%1/.local/lib/fooyin/plugins/"_s.arg(QDir::homePath())));
+    return Utils::createPath(Utils::File::cleanPath(
+        u"%1/.local/lib/%2/plugins/"_s.arg(QDir::homePath(), QCoreApplication::applicationName())));
 #endif
 }
 

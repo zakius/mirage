@@ -207,9 +207,9 @@ int main(int argc, char** argv)
     Q_INIT_RESOURCE(data);
     Q_INIT_RESOURCE(icons);
 
-    QCoreApplication::setApplicationName(u"fooyin"_s);
+    QCoreApplication::setApplicationName(u"mirage"_s);
     QCoreApplication::setApplicationVersion(QStringLiteral(VERSION));
-    QGuiApplication::setDesktopFileName(u"org.fooyin.fooyin"_s);
+    QGuiApplication::setDesktopFileName(u"io.github.zakius.mirage"_s);
     QGuiApplication::setQuitOnLastWindowClosed(false);
 
 #ifdef Q_OS_WIN

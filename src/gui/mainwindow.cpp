@@ -194,7 +194,7 @@ void MainWindow::setTitle(const QString& title)
 
 void MainWindow::resetTitle()
 {
-    setTitle(u"fooyin"_s);
+    setTitle(QCoreApplication::applicationName());
 }
 
 void MainWindow::showHiddenMenu(QAction* activeAction, QWidget* anchor)

@@ -45,13 +45,17 @@ Q_LOGGING_CATEGORY(MPRIS, "fy.mpris")
 using namespace Qt::StringLiterals;
 
 constexpr auto MprisObjectPath = "/org/mpris/MediaPlayer2"_L1;
-constexpr auto ServiceName     = "org.mpris.MediaPlayer2.fooyin"_L1;
 constexpr auto PlayerEntity    = "org.mpris.MediaPlayer2.Player"_L1;
 constexpr auto DbusPath        = "org.freedesktop.DBus.Properties"_L1;
 constexpr auto NoTrackPath     = "/org/mpris/MediaPlayer2/TrackList/NoTrack"_L1;
 
 namespace Fooyin::Mpris {
 namespace {
+QString serviceName()
+{
+    return u"org.mpris.MediaPlayer2."_s + QCoreApplication::applicationName();
+}
+
 QDBusObjectPath formatTrackId(const PlaylistTrack& playlistTrack)
 {
     if(!playlistTrack.isValid()) {
@@ -223,7 +227,7 @@ void MprisPlugin::initialise(const GuiPluginContext& context)
         return;
     }
 
-    if(!QDBusConnection::sessionBus().registerService(ServiceName)) {
+    if(!QDBusConnection::sessionBus().registerService(serviceName())) {
         qCWarning(MPRIS) << "Cannot register with the session dbus";
         return;
     }
@@ -247,7 +251,7 @@ void MprisPlugin::shutdown()
         return;
     }
 
-    QDBusConnection::sessionBus().unregisterService(ServiceName);
+    QDBusConnection::sessionBus().unregisterService(serviceName());
 }
 
 QString MprisPlugin::identity() const

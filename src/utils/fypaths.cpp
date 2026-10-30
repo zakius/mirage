@@ -105,12 +105,12 @@ QString statePath(const QString& appendPath)
     if(!QDir::isAbsolutePath(stateHome)) {
         stateHome = QDir::homePath() + "/.local/state"_L1;
     }
-    path = stateHome + "/fooyin"_L1;
+    path = stateHome + u"/"_s + QCoreApplication::applicationName();
 #else
     if(QStandardPaths::isTestModeEnabled()) {
         const QString stateHome = QFile::decodeName(qgetenv("XDG_STATE_HOME"));
         if(QDir::isAbsolutePath(stateHome)) {
-            path = stateHome + "/fooyin"_L1;
+            path = stateHome + u"/"_s + QCoreApplication::applicationName();
         }
     }
     if(path.isEmpty()) {
