@@ -25,6 +25,7 @@
 #include "settings/scrobblersettings.h"
 
 #include <core/constants.h>
+#include <core/library/libraryprovider.h>
 #include <core/library/musiclibrary.h>
 #include <core/player/playercontroller.h>
 #include <utils/settings/settingsmanager.h>
@@ -61,12 +62,13 @@ QString trackStatsSyncKey(const ScrobblerService* service, const Fooyin::Track& 
 
 Scrobbler::Scrobbler(PlayerController* playerController, MusicLibrary* library,
                      std::shared_ptr<NetworkAccessManager> network, SettingsManager* settings,
-                     DbConnectionPoolPtr dbPool)
+                     DbConnectionPoolPtr dbPool, std::shared_ptr<LibraryProviderRegistry> libraryProviders)
     : m_playerController{playerController}
     , m_library{library}
     , m_network{std::move(network)}
     , m_settings{settings}
     , m_dbPool{std::move(dbPool)}
+    , m_libraryProviders{std::move(libraryProviders)}
 {
     addDefaultServices();
     restoreServices();
@@ -112,8 +114,18 @@ ScrobblerService* Scrobbler::service(const QString& name) const
     return nullptr;
 }
 
+bool Scrobbler::providerReportsPlays(const Track& track) const
+{
+    const auto provider = m_libraryProviders ? m_libraryProviders->providerForPath(track.filepath()) : nullptr;
+    return provider && provider->reportsPlays();
+}
+
 void Scrobbler::scrobble(const Track& track)
 {
+    if(providerReportsPlays(track)) {
+        return;
+    }
+
     for(auto& service : m_services) {
         if(service->isEnabled()) {
             service->scrobble(track);
@@ -412,6 +424,10 @@ void Scrobbler::pruneTrackStatsSyncState(const int64_t now)
 
 void Scrobbler::updateNowPlaying(const Track& track)
 {
+    if(providerReportsPlays(track)) {
+        return;
+    }
+
     const auto now = static_cast<int64_t>(QDateTime::currentMSecsSinceEpoch());
     pruneTrackStatsSyncState(now);
 

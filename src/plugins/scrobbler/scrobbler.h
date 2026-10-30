@@ -34,6 +34,7 @@
 class QString;
 
 namespace Fooyin {
+class LibraryProviderRegistry;
 class NetworkAccessManager;
 class MusicLibrary;
 class PlayerController;
@@ -48,7 +49,8 @@ class Scrobbler : public QObject
 
 public:
     Scrobbler(PlayerController* playerController, MusicLibrary* library, std::shared_ptr<NetworkAccessManager> network,
-              SettingsManager* settings, DbConnectionPoolPtr dbPool);
+              SettingsManager* settings, DbConnectionPoolPtr dbPool,
+              std::shared_ptr<LibraryProviderRegistry> libraryProviders = {});
     ~Scrobbler() override;
 
     [[nodiscard]] std::vector<ScrobblerService*> services() const;
@@ -89,6 +91,7 @@ private:
     [[nodiscard]] std::optional<RemoteLovedState> preferredRemoteLovedState(const QString& trackKey) const;
     void applyRemoteLovedState(Track& track, const QString& trackKey, Track::Stats& changedStats, int64_t now);
     void pruneTrackStatsSyncState(int64_t now);
+    [[nodiscard]] bool providerReportsPlays(const Track& track) const;
     void updateNowPlaying(const Track& track);
     void updateNowPlayingTimer(bool reset = false);
     void setupService(ScrobblerService* service);
@@ -102,6 +105,7 @@ private:
     std::shared_ptr<NetworkAccessManager> m_network;
     SettingsManager* m_settings;
     DbConnectionPoolPtr m_dbPool;
+    std::shared_ptr<LibraryProviderRegistry> m_libraryProviders;
 
     std::vector<std::unique_ptr<ScrobblerService>> m_services;
     std::unordered_map<QString, int64_t> m_lastTrackStatsSync;
