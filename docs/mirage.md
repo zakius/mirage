@@ -142,9 +142,12 @@ Subsonic API documentation.
     loved
   - an `ARTWORKURL` tag with `<library path>/cover/<coverArt>`
 
-  If a server does not accept an empty `search3` query, the plugin falls back to walking `getAlbumList2`
-  (`alphabeticalByName`) and `getAlbum`.
-- **Stream.** `stream?id=<id>` with token parameters, through a seekable range-request `QIODevice`.
+  If a server rejects an empty `search3` query (error 10) or returns no songs for it, the plugin falls back to walking
+  `getAlbumList2` (`alphabeticalByName`) and `getAlbum`. Other errors, such as wrong credentials, fail the sync and
+  keep the tracks.
+- **Stream.** `stream?id=<id>` with token parameters, through a seekable `QIODevice` that fetches 1 MiB chunks with
+  range requests, prefetches two chunks ahead and retries a failed chunk twice. A server that ignores range requests
+  sends the whole file, which is read while it downloads; a seek past the downloaded part waits for it.
 - **Cover art.** `getCoverArt?id=<coverArt>`, through `resolveUrl()`.
 - **Plays.** On `PlayerController::currentTrackChanged`, `scrobble?id=..&submission=false` (now playing). On
   `trackPlayed` (fooyin's "play counts" moment), `scrobble?id=..&submission=true&time=<ms>`. `reportsPlays()` returns
@@ -152,8 +155,15 @@ Subsonic API documentation.
 - **Ratings and stars.** On `tracksStatsChanged`: a rating change calls `setRating`, rounded to 1–5 stars, or 0 to
   clear. A love change calls `star` or `unstar`.
 - **Playlists.** After each sync, `getPlaylists` and `getPlaylist` for each one. Each server playlist becomes a fooyin
-  playlist, matched by a `SubsonicPlaylist` extra property, and is created or replaced. The sync is one-way, from the
-  server to fooyin.
+  playlist, matched by a `SubsonicPlaylist` extra property, and is created, renamed, replaced or removed to match.
+  Edits in fooyin go back to the server one second after the last change: track changes through `createPlaylist` with
+  `playlistId` (which replaces the entries), renames through `updatePlaylist`, and removal through `deletePlaylist`.
+  A playlist with unsent edits is not overwritten by a sync. The last write wins.
+- **Accounts.** The settings page lists the servers. Selecting one edits its name, URL, user name or password; an empty
+  password keeps the stored one. The library path stays the same, so tracks, statistics and playlists are kept when
+  the server moves.
+- **Errors.** API errors carry the Subsonic error code. Error messages never include request URLs, because those carry
+  the authentication token.
 - **Refresh.** The plugin syncs its libraries once tracks have loaded at startup, because server content changes
   without local file changes. When fooyin's own "auto refresh" is on, that refresh covers it instead. "Scan for
   changes" and the library settings page also sync.
@@ -161,8 +171,7 @@ Subsonic API documentation.
 ## Branches
 
 - `library-providers`, on `master`: only the generic API commits, each tagged `[core]`, `[gui]` or `[scrobbler]` as
-  in upstream. This branch is the candidate for an upstream pull request. Note that upstream does not accept code
-  written with generative AI (`CONTRIBUTING.md`), so offering it upstream needs the user's decision.
+  in upstream, kept as a small series that rebases onto upstream `master` (see "Keeping the fork rebased").
 - `mirage`, on `library-providers`: this document and the Subsonic plugin (`[subsonic]` commits). Rebase it when the
   API branch changes.
 
@@ -186,29 +195,49 @@ Subsonic API documentation.
    5. End-to-end test against a real server (oasis with a generated library): library tree, search, playback, seeking,
       cover art, and play counts in `getSong`.
 
+## Keeping the fork rebased
+
+Upstream does not accept code written with generative AI, so mirage stays a fork. The patches are kept small so that
+they rebase easily:
+
+- `library-providers` is a short series on top of upstream `master` (about 420 changed lines in `src` and `include`,
+  plus tests). It adds one header and one source file and touches existing files only at narrow points.
+- `mirage` adds the plugin in its own directory; outside it, only `src/plugins/CMakeLists.txt` changes.
+
+To update:
+
+```
+git fetch upstream
+git rebase upstream/master library-providers
+git rebase library-providers mirage
+cmake --build --preset debug && ctest --preset debug
+```
+
 ## Status (2026-10-30)
 
 Steps 1 to 3 are done. Verified against oasis with a generated 30-track library, in an isolated fooyin profile that
-plays to a PulseAudio null sink:
+plays to a PulseAudio null sink. Fault cases used a proxy in front of oasis.
 
 - Adding a server on the settings page syncs all tracks into the library tree, filters and library search.
+- Editing a server's URL and name keeps the library; an empty password field keeps the password.
 - Playback, and seeking forward and backward through range requests.
+- A server that ignores range requests: playback starts while the file downloads, and seeking still works.
+- Failed stream requests (every third one returning HTTP 500) are retried and playback continues.
 - Cover art, both embedded and from folder images.
-- Plays reach the server: `getSong` play counts increase once fooyin's played threshold passes.
+- Plays reach the server: `getSong` play counts increase once fooyin's played threshold passes. A ListenBrainz service
+  receives plays of local tracks but nothing for server tracks.
 - Ratings and stars set in fooyin reach the server, and unstarring works.
 - Server changes (one track added, one removed, one rated) arrive on the next sync as exactly those changes. A sync of
   unchanged data writes nothing.
-- A server playlist appears as a fooyin playlist, in server order.
+- A server without empty `search3` support is synced through album listing, with the same result.
+- A failed sync (wrong password) keeps the tracks.
+- Server playlists appear in fooyin. Adding, removing and renaming in fooyin reach the server, and removing the
+  playlist in fooyin deletes it on the server. Playlists deleted on the server disappear from fooyin.
 - Library and playlist entries survive a restart.
 
-Known gaps:
+Limits:
 
-- Playlists sync one way. Edits made in fooyin are not sent to the server, and the next sync overwrites them.
-- There is no editing of a server's URL or password, except by adding the same server again, which replaces the stored
-  account.
-- A server that ignores range requests is downloaded whole before playback starts.
-- A stream read that fails once fails the track; it is not retried.
-- The scrobbler plugin skips provider tracks, but this was not tested against a real Last.fm account.
-- The `getAlbumList2` and `getAlbum` fallback for servers without empty `search3` queries is untested, because oasis
-  supports empty queries.
-
+- Only playlists that came from a server sync back. A new fooyin playlist stays local.
+- Tracks that are not on the playlist's server (local files, other servers) stay in the fooyin playlist but are not
+  sent.
+- Playlist conflicts resolve by last write.
