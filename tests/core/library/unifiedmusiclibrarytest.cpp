@@ -654,6 +654,13 @@ TEST_F(UnifiedMusicLibraryTest, RemovingUnavailableTracksKeepsProviderTracks)
     EXPECT_EQ(context().library.libraryTracks().size(), 1);
 }
 
+TEST_F(UnifiedMusicLibraryTest, OnlyProviderLibrariesCanBeAdded)
+{
+    // mirage: libraries are servers, never folders
+    EXPECT_LT(context().libraryManager.addLibrary(context().tempDir.path(), u"Folder"_s), 0);
+    EXPECT_GT(context().libraryManager.addLibrary(u"fake://server"_s, u"Server"_s), 0);
+}
+
 TEST_F(UnifiedMusicLibraryTest, FailedProviderFetchKeepsTracks)
 {
     auto provider  = std::make_shared<FakeLibraryProvider>();

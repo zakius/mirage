@@ -31,6 +31,7 @@
 #include <gui/widgets/extendabletableview.h>
 #include <gui/widgets/hintlabel.h>
 #include <utils/fypaths.h>
+#include <utils/settings/settingsdialogcontroller.h>
 #include <utils/settings/settingsmanager.h>
 #include <utils/utils.h>
 
@@ -184,6 +185,12 @@ LibraryGeneralPageWidget::LibraryGeneralPageWidget(LibraryManager* libraryManage
     availabilityLayout->addWidget(m_markUnavailable, row++, 0);
     availabilityLayout->addWidget(m_markUnavailableStart, row++, 0);
 
+    // mirage: libraries are Subsonic servers, so folder settings do not apply
+    fileTypesGroup->hide();
+    availabilityGroup->hide();
+    m_monitorLibraryDirectories->hide();
+    m_monitorTrackFiles->hide();
+
     auto* mainLayout = new QGridLayout(this);
 
     row = 0;
@@ -275,18 +282,9 @@ void LibraryGeneralPageWidget::reset()
 
 void LibraryGeneralPageWidget::addLibrary() const
 {
-    const QString dir = QFileDialog::getExistingDirectory(m_libraryView, tr("Directory"), QDir::homePath(),
-                                                          QFileDialog::DontResolveSymlinks);
-
-    if(dir.isEmpty()) {
-        m_model->markForAddition({});
-        return;
-    }
-
-    const QFileInfo info{QDir::cleanPath(dir)};
-    const QString name = info.fileName();
-
-    m_model->markForAddition({.name = name, .path = dir});
+    // mirage: libraries are added as servers on the Subsonic page
+    m_model->markForAddition({});
+    m_settings->settingsDialog()->openAtPage("Fooyin.Page.Library.Subsonic");
 }
 
 LibraryGeneralPage::LibraryGeneralPage(LibraryManager* libraryManager, MusicLibrary* library, SettingsManager* settings,

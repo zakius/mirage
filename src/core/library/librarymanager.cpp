@@ -22,6 +22,7 @@
 #include "database/librarydatabase.h"
 #include "database/trackdatabase.h"
 
+#include <core/track.h>
 #include <utils/database/dbconnectionhandler.h>
 #include <utils/database/dbconnectionprovider.h>
 #include <utils/fileutils.h>
@@ -117,7 +118,8 @@ int LibraryManager::addLibrary(const QString& path, const QString& name)
 {
     assertMainThread();
 
-    if(!checkNewPath(path, p->m_libraries)) {
+    // mirage: only library providers (servers) back libraries, never folders
+    if(!checkNewPath(path, p->m_libraries) || !Track::isVirtualPath(path)) {
         return -1;
     }
 
