@@ -379,9 +379,16 @@ bool LibraryScanSession::syncLibrary(const LibraryInfo& library, const TrackList
             Track existing{existingIt->second};
             existing.clearWasModified();
 
+            // Keep stored times the provider does not know
             track.setId(existing.id());
             if(track.addedTime() == 0) {
                 track.setAddedTime(existing.addedTime());
+            }
+            if(track.firstPlayed() == 0) {
+                track.setFirstPlayed(existing.firstPlayed());
+            }
+            if(track.lastPlayed() == 0) {
+                track.setLastPlayed(existing.lastPlayed());
             }
             if(!track.sameDataAs(existing)) {
                 m_writer.updateTrack(track);

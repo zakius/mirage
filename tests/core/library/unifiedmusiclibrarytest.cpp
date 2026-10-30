@@ -608,6 +608,22 @@ TEST_F(UnifiedMusicLibraryTest, ProviderLibrarySyncStoresUpdatesAndRemovesTracks
 
     syncAndExpect({.added = 0, .updated = 0, .removed = 0});
 
+    // Times the provider does not report, such as a local first play, survive syncs
+    Track playedTrack = findTrack(u"One"_s);
+    playedTrack.setFirstPlayed(1000);
+    playedTrack.setLastPlayed(2000);
+    QSignalSpy statsSpy{&context().library, &MusicLibrary::tracksStatsChanged};
+    context().library.updateTrackStats(playedTrack, Track::Stat::Playcount);
+    waitForSignal(statsSpy);
+
+    // Tracks reloaded from the database compare equal to unchanged provider tracks
+    QSignalSpy loadedSpy{&context().library, &MusicLibrary::tracksLoaded};
+    context().library.loadAllTracks();
+    waitForSignal(loadedSpy);
+
+    syncAndExpect({.added = 0, .updated = 0, .removed = 0});
+    EXPECT_EQ(findTrack(u"One"_s).firstPlayed(), 1000);
+
     provider->tracks = TrackList{providerTrack(u"1"_s, u"One (Remastered)"_s)};
     syncAndExpect({.added = 0, .updated = 1, .removed = 1});
 

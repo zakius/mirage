@@ -125,7 +125,8 @@ Fooyin::Track readToTrack(const Fooyin::DbQuery& q, const std::shared_ptr<Fooyin
     track.setCodec(q.value(25).toString());
     track.setCodecProfile(q.value(26).toString());
     track.setTool(q.value(27).toString());
-    track.setTagTypes(q.value(28).toString().split(QLatin1String{Fooyin::Constants::UnitSeparator}));
+    track.setTagTypes(
+        q.value(28).toString().split(QLatin1String{Fooyin::Constants::UnitSeparator}, Qt::SkipEmptyParts));
     track.setEncoding(q.value(29).toString());
     track.storeExtraTags(q.value(30).toByteArray());
     track.storeExtraProperties(q.value(31).toByteArray());
