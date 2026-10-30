@@ -456,7 +456,7 @@ void TrackDatabaseManager::removeUnavailbleTracks(const TrackList& tracks, int o
             break;
         }
 
-        if(!QFileInfo::exists(track.isInArchive() ? track.archivePath() : track.filepath())) {
+        if(!track.exists()) {
             trackstoRemove.push_back(track);
         }
     }

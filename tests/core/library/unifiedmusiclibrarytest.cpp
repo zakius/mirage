@@ -633,6 +633,27 @@ TEST_F(UnifiedMusicLibraryTest, ProviderLibrarySyncStoresUpdatesAndRemovesTracks
     EXPECT_EQ(tracks.front().id(), storedTrack.id());
 }
 
+TEST_F(UnifiedMusicLibraryTest, RemovingUnavailableTracksKeepsProviderTracks)
+{
+    auto provider  = std::make_shared<FakeLibraryProvider>();
+    auto providers = std::make_shared<LibraryProviderRegistry>();
+    providers->addProvider(provider);
+    context().library.setLibraryProviders(providers);
+
+    const int libraryId = insertLibrary(context().dbPool, u"fake://server"_s, u"Server"_s);
+    context().libraryManager.reset();
+    const LibraryInfo libraryInfo = context().libraryManager.libraryInfo(libraryId).value_or(LibraryInfo{});
+
+    provider->tracks = TrackList{providerTrack(u"1"_s, u"One"_s)};
+    waitForSuccessfulScan([&]() { return context().library.refresh(libraryInfo); });
+    ASSERT_EQ(context().library.libraryTracks().size(), 1);
+
+    WriteRequest request = context().library.removeUnavailbleTracks();
+    ASSERT_TRUE(waitForCondition([&]() { return request.finished.isFinished(); }));
+    EXPECT_EQ(request.finished.result().succeeded, 0);
+    EXPECT_EQ(context().library.libraryTracks().size(), 1);
+}
+
 TEST_F(UnifiedMusicLibraryTest, FailedProviderFetchKeepsTracks)
 {
     auto provider  = std::make_shared<FakeLibraryProvider>();
