@@ -32,6 +32,7 @@ set(SOURCES
     ${CMAKE_SOURCE_DIR}/include/core/engine/visualisationservice.h
     ${CMAKE_SOURCE_DIR}/include/core/library/libraryfilter.h
     ${CMAKE_SOURCE_DIR}/include/core/library/libraryinfo.h
+    ${CMAKE_SOURCE_DIR}/include/core/library/libraryprovider.h
     ${CMAKE_SOURCE_DIR}/include/core/library/libraryutils.h
     ${CMAKE_SOURCE_DIR}/include/core/library/musiclibrary.h
     ${CMAKE_SOURCE_DIR}/include/core/library/pendingtrackcoverprovider.h
@@ -245,6 +246,7 @@ set(SOURCES
     library/librarymanager.h
     library/librarymonitor.cpp
     library/librarymonitor.h
+    library/libraryprovider.cpp
     library/libraryscanner.cpp
     library/libraryscanner.h
     library/libraryscansession.cpp

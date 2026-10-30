@@ -43,6 +43,7 @@ class DspRegistry;
 class EngineController;
 class EngineHandler;
 class LibraryManager;
+class LibraryProviderRegistry;
 class MusicLibrary;
 class NetworkAccessManager;
 class PendingTrackCoverProvider;
@@ -124,6 +125,7 @@ private:
     std::unique_ptr<DspRegistry> m_dspRegistry;
     std::unique_ptr<DspChainStore> m_dspChainStore;
     std::shared_ptr<NetworkAccessManager> m_networkManager;
+    std::shared_ptr<LibraryProviderRegistry> m_libraryProviders;
     std::shared_ptr<RemoteIoService> m_remoteIo;
     LibraryManager* m_libraryManager;
     std::shared_ptr<PlaylistLoader> m_playlistLoader;

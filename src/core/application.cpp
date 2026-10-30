@@ -47,6 +47,7 @@
 #include <core/engine/dsp/dspplugin.h>
 #include <core/engine/encoderplugin.h>
 #include <core/engine/outputplugin.h>
+#include <core/library/libraryprovider.h>
 #include <core/network/networkaccessmanager.h>
 #include <core/network/remoteioservice.h>
 #include <core/player/playercontroller.h>
@@ -109,6 +110,7 @@ Application::Application(QObject* parent)
     , m_dspRegistry{std::make_unique<DspRegistry>()}
     , m_dspChainStore{std::make_unique<DspChainStore>(m_settings, m_dspRegistry.get())}
     , m_networkManager{std::make_shared<NetworkAccessManager>(m_settings)}
+    , m_libraryProviders{std::make_shared<LibraryProviderRegistry>()}
     , m_remoteIo{std::make_shared<RemoteIoService>(m_networkManager, m_settings)}
     , m_libraryManager{new LibraryManager(m_database->connectionPool(), m_settings, this)}
     , m_playlistLoader{std::make_shared<PlaylistLoader>()}
@@ -132,7 +134,8 @@ Application::Application(QObject* parent)
                           m_sortingRegistry,
                           m_networkManager,
                           m_database->connectionPool(),
-                          m_scriptContext}
+                          m_scriptContext,
+                          m_libraryProviders}
 {
     m_audioLoader->setRemoteSourceProvider(m_remoteIo);
     m_translations.initialiseTranslations(m_settings->value<Settings::Core::Language>());
