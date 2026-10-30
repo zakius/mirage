@@ -36,6 +36,7 @@ set(FOOYIN_KNOWN_PLUGINS
     soundtouch
     spectrogram
     soxresampler
+    subsonic
     tageditor
     thumbnailtoolbar
     vorbis
@@ -72,6 +73,7 @@ set(FOOYIN_DEFAULT_PLUGINS
     spectrum
     soundtouch
     soxresampler
+    subsonic
     tageditor
     vorbis
     vumeter
@@ -162,6 +164,7 @@ fooyin_add_selected_plugin(spectrum)
 fooyin_add_selected_plugin(spectrogram)
 fooyin_add_selected_plugin(soundtouch)
 fooyin_add_selected_plugin(soxresampler)
+fooyin_add_selected_plugin(subsonic)
 fooyin_add_selected_plugin(tageditor)
 fooyin_add_selected_plugin(vorbis)
 fooyin_add_selected_plugin(vumeter)
