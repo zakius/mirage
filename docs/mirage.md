@@ -78,7 +78,8 @@ A scan or refresh of a provider library does not touch the filesystem:
 
 A provider sets only fields that the database stores, so a second sync of unchanged data writes nothing. This is the
 incremental refresh: each sync fetches the whole index, and only real changes reach the database and the views.
-`refresh()`, `rescan()`, "auto refresh on startup" and adding a library all go through this path.
+`refresh()`, `rescan()`, "auto refresh on startup" and adding a library all go through this path. Times the provider
+does not report (added, first played, last played) keep their stored values.
 
 ### Playback
 
@@ -112,7 +113,8 @@ writes the server values over them. This is intended.
 
 ### Missing-file cleanup and rescans
 
-- Provider tracks are virtual, so `Track::exists()` is already true and "remove unavailable tracks" keeps them.
+- Provider tracks are virtual, so `Track::exists()` is true. "Remove unavailable tracks" used its own file check and
+  deleted all remote and virtual tracks; it now uses `Track::exists()`.
 - A rescan of a provider library goes to the provider. A track disappears only when the server stops listing it.
 - `LibraryMonitor` skips provider libraries, because they have no directory to watch.
 - "Reload tags" (`scanTracks`) skips provider tracks, because there is no file to read.
@@ -152,7 +154,9 @@ Subsonic API documentation.
 - **Playlists.** After each sync, `getPlaylists` and `getPlaylist` for each one. Each server playlist becomes a fooyin
   playlist, matched by a `SubsonicPlaylist` extra property, and is created or replaced. The sync is one-way, from the
   server to fooyin.
-- **Refresh.** Startup auto refresh and the library settings page refresh button.
+- **Refresh.** The plugin syncs its libraries once tracks have loaded at startup, because server content changes
+  without local file changes. When fooyin's own "auto refresh" is on, that refresh covers it instead. "Scan for
+  changes" and the library settings page also sync.
 
 ## Branches
 
@@ -181,3 +185,30 @@ Subsonic API documentation.
    4. Playlist sync.
    5. End-to-end test against a real server (oasis with a generated library): library tree, search, playback, seeking,
       cover art, and play counts in `getSong`.
+
+## Status (2026-10-30)
+
+Steps 1 to 3 are done. Verified against oasis with a generated 30-track library, in an isolated fooyin profile that
+plays to a PulseAudio null sink:
+
+- Adding a server on the settings page syncs all tracks into the library tree, filters and library search.
+- Playback, and seeking forward and backward through range requests.
+- Cover art, both embedded and from folder images.
+- Plays reach the server: `getSong` play counts increase once fooyin's played threshold passes.
+- Ratings and stars set in fooyin reach the server, and unstarring works.
+- Server changes (one track added, one removed, one rated) arrive on the next sync as exactly those changes. A sync of
+  unchanged data writes nothing.
+- A server playlist appears as a fooyin playlist, in server order.
+- Library and playlist entries survive a restart.
+
+Known gaps:
+
+- Playlists sync one way. Edits made in fooyin are not sent to the server, and the next sync overwrites them.
+- There is no editing of a server's URL or password, except by adding the same server again, which replaces the stored
+  account.
+- A server that ignores range requests is downloaded whole before playback starts.
+- A stream read that fails once fails the track; it is not retried.
+- The scrobbler plugin skips provider tracks, but this was not tested against a real Last.fm account.
+- The `getAlbumList2` and `getAlbum` fallback for servers without empty `search3` queries is untested, because oasis
+  supports empty queries.
+
