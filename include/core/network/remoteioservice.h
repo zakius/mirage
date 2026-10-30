@@ -41,6 +41,7 @@ class QNetworkAccessManager;
 class QNetworkReply;
 
 namespace Fooyin {
+class LibraryProviderRegistry;
 class SettingsManager;
 
 class FYCORE_EXPORT RemoteDownloadHandle
@@ -71,7 +72,11 @@ public:
     explicit RemoteIoService(std::shared_ptr<QNetworkAccessManager> networkManager, SettingsManager* settings,
                              QObject* parent = nullptr);
 
+    /** Routes URLs with a registered library provider scheme to that provider. */
+    void setLibraryProviders(std::shared_ptr<LibraryProviderRegistry> providers);
+
     [[nodiscard]] RemoteStreamSource createStreamSource(const QUrl& url) const override;
+    [[nodiscard]] bool handlesScheme(const QString& scheme) const override;
 
     [[nodiscard]] std::shared_ptr<RemoteDownloadHandle>
     download(const QUrl& url, QObject* context, DownloadCallback callback,
@@ -80,5 +85,6 @@ public:
 private:
     std::shared_ptr<QNetworkAccessManager> m_networkManager;
     SettingsManager* m_settings;
+    std::shared_ptr<LibraryProviderRegistry> m_providers;
 };
 } // namespace Fooyin

@@ -137,6 +137,7 @@ Application::Application(QObject* parent)
                           m_scriptContext,
                           m_libraryProviders}
 {
+    m_remoteIo->setLibraryProviders(m_libraryProviders);
     m_library->setLibraryProviders(m_libraryProviders);
     m_audioLoader->setRemoteSourceProvider(m_remoteIo);
     m_translations.initialiseTranslations(m_settings->value<Settings::Core::Language>());

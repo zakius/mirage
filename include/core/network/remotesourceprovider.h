@@ -25,6 +25,7 @@
 #include <memory>
 
 class QIODevice;
+class QString;
 class QUrl;
 
 namespace Fooyin {
@@ -43,5 +44,10 @@ public:
     virtual ~RemoteSourceProvider() = default;
 
     [[nodiscard]] virtual RemoteStreamSource createStreamSource(const QUrl& url) const = 0;
+    /** Returns @c true if createStreamSource() also opens URLs with the given non-HTTP scheme. */
+    [[nodiscard]] virtual bool handlesScheme(const QString& /*scheme*/) const
+    {
+        return false;
+    }
 };
 } // namespace Fooyin

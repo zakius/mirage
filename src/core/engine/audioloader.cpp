@@ -292,6 +292,8 @@ public:
     };
 
     [[nodiscard]] std::vector<DecoderCandidate> decoderCandidatesForFile(const QString& file) const;
+    //! True for HTTP(S) sources and for schemes opened by the remote source provider. Requires m_mutex.
+    [[nodiscard]] bool isRemoteSource(const QString& file) const;
 
     std::vector<AudioLoader::LoaderEntry<DecoderCreator>> m_defaultDecoders;
     std::vector<AudioLoader::LoaderEntry<ReaderCreator>> m_defaultReaders;
@@ -304,6 +306,15 @@ public:
     mutable std::shared_mutex m_mutex;
 };
 
+bool AudioLoaderPrivate::isRemoteSource(const QString& file) const
+{
+    if(Track::isRemotePath(file)) {
+        return true;
+    }
+    const QString scheme = sourceScheme(file);
+    return !scheme.isEmpty() && m_remoteSourceProvider && m_remoteSourceProvider->handlesScheme(scheme);
+}
+
 std::vector<AudioLoaderPrivate::DecoderCandidate>
 AudioLoaderPrivate::decoderCandidatesForFile(const QString& file) const
 {
@@ -314,7 +325,7 @@ AudioLoaderPrivate::decoderCandidatesForFile(const QString& file) const
     std::vector<std::pair<QString, DecoderCreator>> creators;
     {
         const std::shared_lock lock{m_mutex};
-        if(Track::isRemotePath(file)) {
+        if(isRemoteSource(file)) {
             for(const auto& loader : m_decoders) {
                 if(!loader.enabled) {
                     continue;
@@ -510,14 +521,17 @@ LoadedDecoder AudioLoader::loadDecoderForTrack(const Track& track, AudioDecoder:
     LoadedDecoder ret;
     const bool isSchemeSource = !sourceScheme(track.filepath()).isEmpty();
 
+    std::shared_ptr<RemoteSourceProvider> remoteSourceProvider;
+    bool isRemoteSource{false};
+    {
+        const std::shared_lock lock{p->m_mutex};
+        remoteSourceProvider = p->m_remoteSourceProvider;
+        isRemoteSource       = p->isRemoteSource(track.filepath());
+    }
+
     for(auto& candidate : decoders) {
         auto decoder = std::make_unique<CarrierDecoder>(std::move(candidate.decoder));
-        if(track.isRemote()) {
-            std::shared_ptr<RemoteSourceProvider> remoteSourceProvider;
-            {
-                const std::shared_lock lock{p->m_mutex};
-                remoteSourceProvider = p->m_remoteSourceProvider;
-            }
+        if(isRemoteSource) {
             if(!openRemoteSource(ret.input, track.filepath(), remoteSourceProvider)) {
                 return {};
             }

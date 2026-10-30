@@ -19,11 +19,13 @@
 
 #include "networktestutils.h"
 
+#include <core/library/libraryprovider.h>
 #include <core/network/networkutils.h>
 #include <core/network/remoteioservice.h>
 
 #include <gtest/gtest.h>
 
+#include <QBuffer>
 #include <QCoreApplication>
 #include <QElapsedTimer>
 #include <QStandardPaths>
@@ -61,6 +63,33 @@ bool waitFor(const std::function<bool()>& condition)
 
     return condition();
 }
+
+class FakeLibraryProvider : public Fooyin::LibraryProvider
+{
+public:
+    [[nodiscard]] QString scheme() const override
+    {
+        return u"fake"_s;
+    }
+
+    void fetchTracks(const Fooyin::LibraryInfo& /*library*/, FetchCallback callback) override
+    {
+        callback(Fooyin::TrackList{});
+    }
+
+    [[nodiscard]] Fooyin::RemoteStreamSource createStreamSource(const QUrl& url) const override
+    {
+        Fooyin::RemoteStreamSource source;
+        source.device = std::make_unique<QBuffer>();
+        source.device->setObjectName(url.toString());
+        return source;
+    }
+
+    [[nodiscard]] QUrl resolveUrl(const QUrl& url) const override
+    {
+        return QUrl{u"https://example.com"_s + url.path()};
+    }
+};
 } // namespace
 
 namespace Fooyin::Testing {
@@ -143,5 +172,27 @@ TEST_F(RemoteIoServiceTest, ReportsTimeoutExplicitly)
 
     ASSERT_TRUE(waitFor([&] { return finished; }));
     EXPECT_EQ(u"Timed out"_s, error);
+}
+TEST_F(RemoteIoServiceTest, RoutesProviderUrlsToLibraryProvider)
+{
+    auto network   = makeFakeNetworkAccessManager(true);
+    auto providers = std::make_shared<LibraryProviderRegistry>();
+    providers->addProvider(std::make_shared<FakeLibraryProvider>());
+
+    RemoteIoService service{network, nullptr};
+    service.setLibraryProviders(providers);
+
+    EXPECT_TRUE(service.handlesScheme(u"fake"_s));
+    EXPECT_FALSE(service.handlesScheme(u"cdda"_s));
+
+    const auto source = service.createStreamSource(QUrl{u"fake://server/song/1"_s});
+    ASSERT_NE(source.device, nullptr);
+    EXPECT_EQ(source.device->objectName(), u"fake://server/song/1"_s);
+
+    auto handle = service.download(QUrl{u"fake://server/cover/1"_s}, qApp, [](std::optional<QByteArray>, QString) { });
+    ASSERT_NE(handle, nullptr);
+    ASSERT_FALSE(network->lastReply.isNull());
+    EXPECT_EQ(network->lastRequest.url(), QUrl{u"https://example.com/cover/1"_s});
+    network->lastReply->finish({});
 }
 } // namespace Fooyin::Testing

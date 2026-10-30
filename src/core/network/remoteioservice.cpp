@@ -23,6 +23,7 @@
 #include "internalcoresettings.h"
 #include "networkstreamdevice.h"
 
+#include <core/library/libraryprovider.h>
 #include <core/network/networkutils.h>
 
 #include <utils/settings/settingsmanager.h>
@@ -87,8 +88,22 @@ RemoteIoService::RemoteIoService(std::shared_ptr<QNetworkAccessManager> networkM
     , m_settings{settings}
 { }
 
+void RemoteIoService::setLibraryProviders(std::shared_ptr<LibraryProviderRegistry> providers)
+{
+    m_providers = std::move(providers);
+}
+
+bool RemoteIoService::handlesScheme(const QString& scheme) const
+{
+    return m_providers && m_providers->provider(scheme);
+}
+
 RemoteStreamSource RemoteIoService::createStreamSource(const QUrl& url) const
 {
+    if(const auto provider = m_providers ? m_providers->providerForPath(url.toString()) : nullptr) {
+        return provider->createStreamSource(url);
+    }
+
     const auto readAheadKb      = std::max(0, m_settings->value<Settings::Core::Internal::RemoteReadAheadKb>());
     const auto maxBufferedBytes = static_cast<qsizetype>(std::max(1, readAheadKb) * 1024);
     const auto openTimeoutMs    = std::max(1000, m_settings->value<Settings::Core::Internal::RemoteOpenTimeoutMs>());
@@ -112,11 +127,16 @@ RemoteStreamSource RemoteIoService::createStreamSource(const QUrl& url) const
     return source;
 }
 
-std::shared_ptr<RemoteDownloadHandle> RemoteIoService::download(const QUrl& url, QObject* context,
+std::shared_ptr<RemoteDownloadHandle> RemoteIoService::download(const QUrl& requestedUrl, QObject* context,
                                                                 DownloadCallback callback,
                                                                 std::chrono::milliseconds timeout)
 {
     auto handle = std::make_shared<RemoteDownloadHandle>();
+
+    QUrl url{requestedUrl};
+    if(const auto provider = m_providers ? m_providers->providerForPath(url.toString()) : nullptr) {
+        url = provider->resolveUrl(url);
+    }
 
     const auto timeoutMs = static_cast<int>(std::clamp(timeout, 1ms, std::chrono::milliseconds{INT_MAX}).count());
 
