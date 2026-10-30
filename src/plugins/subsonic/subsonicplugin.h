@@ -23,6 +23,7 @@
 #include <core/plugins/plugin.h>
 #include <core/track.h>
 #include <gui/plugins/guiplugin.h>
+#include <utils/id.h>
 
 #include <QTimer>
 
@@ -55,6 +56,9 @@ private:
     void playlistEdited(const Playlist* playlist);
     void playlistRemoved(const Playlist* playlist);
     void pushPlaylists();
+    [[nodiscard]] std::optional<QString> defaultServer() const;
+    void uploadPlaylist(Playlist* playlist);
+    void linkPlaylist(const UId& id, const QString& server, const QString& serverId);
 
     LibraryManager* m_libraryManager{nullptr};
     MusicLibrary* m_library{nullptr};
@@ -65,6 +69,8 @@ private:
     //! Mirrored playlists edited locally and not yet sent to the server.
     std::set<QString> m_dirtyPlaylists;
     QTimer m_pushTimer;
+    //! Playlists being created on the server.
+    std::set<UId> m_uploadingPlaylists;
     bool m_applyingServerChanges{false};
 };
 } // namespace Fooyin::Subsonic

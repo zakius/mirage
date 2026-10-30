@@ -110,6 +110,8 @@ void SubsonicPlugin::initialise(const CorePluginContext& context)
     QObject::connect(m_playlistHandler, &PlaylistHandler::tracksRemoved, this, markEdited);
     QObject::connect(m_playlistHandler, &PlaylistHandler::playlistRenamed, this, markEdited);
     QObject::connect(m_playlistHandler, &PlaylistHandler::playlistRemoved, this, &SubsonicPlugin::playlistRemoved);
+    // New playlists are created on the server
+    QObject::connect(m_playlistHandler, &PlaylistHandler::playlistAdded, this, &SubsonicPlugin::uploadPlaylist);
     m_pushTimer.setSingleShot(true);
     m_pushTimer.setInterval(1s);
     QObject::connect(&m_pushTimer, &QTimer::timeout, this, &SubsonicPlugin::pushPlaylists);
@@ -121,6 +123,10 @@ void SubsonicPlugin::initialise(const CorePluginContext& context)
                          }
                          for(const QString& libraryPath : std::exchange(m_pendingPlaylistSyncs, {})) {
                              syncPlaylists(libraryPath);
+                         }
+                         // Playlists made before a server was added, or whose upload failed
+                         for(Playlist* playlist : m_playlistHandler->playlists()) {
+                             uploadPlaylist(playlist);
                          }
                      });
 }
@@ -203,6 +209,88 @@ void SubsonicPlugin::playlistRemoved(const Playlist* playlist)
     m_provider->call(key, u"deletePlaylist"_s, params, [](std::optional<QJsonObject> response, ApiError error) {
         logError(u"deletePlaylist"_s, response, error);
     });
+}
+
+std::optional<QString> SubsonicPlugin::defaultServer() const
+{
+    for(const auto& [id, library] : m_libraryManager->allLibraries()) {
+        if(m_provider->isProviderPath(library.path)) {
+            return library.path;
+        }
+    }
+    return {};
+}
+
+void SubsonicPlugin::uploadPlaylist(Playlist* playlist)
+{
+    if(m_applyingServerChanges || !playlist || playlist->isTemporary() || playlist->isAutoPlaylist()
+       || !playlistKey(playlist).isEmpty() || m_uploadingPlaylists.contains(playlist->id())) {
+        return;
+    }
+
+    const auto server = defaultServer();
+    if(!server) {
+        return;
+    }
+
+    const QString songsPrefix = *server + u"/song/"_s;
+    QUrlQuery params;
+    params.addQueryItem(u"name"_s, playlist->name());
+    for(const Track& track : playlist->tracks()) {
+        if(track.filepath().startsWith(songsPrefix)) {
+            params.addQueryItem(u"songId"_s, songId(track.filepath()));
+        }
+    }
+
+    m_uploadingPlaylists.emplace(playlist->id());
+    m_provider->call(
+        *server, u"createPlaylist"_s, params,
+        [this, id = playlist->id(), name = playlist->name(), server = *server](std::optional<QJsonObject> response,
+                                                                               ApiError error) {
+            if(!response) {
+                m_uploadingPlaylists.erase(id);
+                logError(u"createPlaylist"_s, response, error);
+                return;
+            }
+
+            const QString serverId = response->value("playlist"_L1).toObject().value("id"_L1).toVariant().toString();
+            if(!serverId.isEmpty()) {
+                linkPlaylist(id, server, serverId);
+                return;
+            }
+
+            // Servers before API 1.14 do not return the new playlist, so find it by name
+            m_provider->call(
+                server, u"getPlaylists"_s, {},
+                [this, id, name, server](std::optional<QJsonObject> playlists, ApiError) {
+                    QString newest;
+                    for(const auto& value : toArray(
+                            playlists.value_or(QJsonObject{}).value("playlists"_L1).toObject().value("playlist"_L1))) {
+                        const QJsonObject candidate = value.toObject();
+                        if(candidate.value("name"_L1).toString() == name) {
+                            newest = candidate.value("id"_L1).toVariant().toString();
+                        }
+                    }
+                    linkPlaylist(id, server, newest);
+                });
+        });
+}
+
+void SubsonicPlugin::linkPlaylist(const UId& id, const QString& server, const QString& serverId)
+{
+    m_uploadingPlaylists.erase(id);
+
+    auto* playlist = m_playlistHandler->playlistById(id);
+    if(!playlist || serverId.isEmpty()) {
+        return;
+    }
+
+    const QString key = server + u"/playlist/"_s + serverId;
+    playlist->setExtraProperty(QString::fromLatin1(PlaylistProperty), key);
+
+    // Send edits made while the playlist was being created
+    m_dirtyPlaylists.emplace(key);
+    m_pushTimer.start();
 }
 
 void SubsonicPlugin::pushPlaylists()
