@@ -57,6 +57,11 @@ public:
 
     bool scanLibrary(const LibraryInfo& library, const TrackList& tracks, bool onlyModified);
     bool scanDirectories(const LibraryInfo& library, const QStringList& dirs, const TrackList& tracks);
+    /*!
+     * Replaces the contents of a provider library with @p providerTracks.
+     * New tracks are stored, changed tracks updated, and tracks missing from @p providerTracks are disabled.
+     */
+    bool syncLibrary(const LibraryInfo& library, const TrackList& tracks, const TrackList& providerTracks);
     bool scanFiles(const TrackList& libraryTracks, const QList<QUrl>& urls, LibraryScanFilesResult& result);
     bool scanPlaylist(const TrackList& libraryTracks, const QList<QUrl>& urls, TrackList& result);
     void scanPlaylistAsync(const TrackList& libraryTracks, const QList<QUrl>& urls, QObject* context,

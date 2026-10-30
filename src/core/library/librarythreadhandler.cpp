@@ -27,6 +27,7 @@
 
 #include <core/coresettings.h>
 #include <core/engine/audioinput.h>
+#include <core/library/libraryprovider.h>
 #include <core/library/libraryutils.h>
 #include <core/library/musiclibrary.h>
 #include <core/trackmetadatastore.h>
@@ -35,6 +36,7 @@
 #include <QBasicTimer>
 #include <QFuture>
 #include <QLoggingCategory>
+#include <QPointer>
 #include <QPromise>
 #include <QThread>
 #include <QTimerEvent>
@@ -174,6 +176,8 @@ public:
                                 std::shared_ptr<RemoteIoService> remoteIo, SettingsManager* settings);
 
     void scanLibrary(const LibraryScanRequest& request);
+    void syncProviderLibrary(const LibraryScanRequest& request, LibraryProvider& provider);
+    [[nodiscard]] bool isProviderPath(const QString& path) const;
     void scanTracks(const LibraryScanRequest& request);
     void scanFiles(const LibraryScanRequest& request);
     void scanDirectory(const LibraryScanRequest& request);
@@ -222,6 +226,7 @@ public:
     DbConnectionPoolPtr m_dbPool;
     MusicLibrary* m_library;
     SettingsManager* m_settings;
+    std::shared_ptr<LibraryProviderRegistry> m_providers;
 
     QThread m_thread;
     QThread m_databaseThread;
@@ -279,10 +284,48 @@ LibraryThreadHandlerPrivate::LibraryThreadHandlerPrivate(LibraryThreadHandler* s
 
 void LibraryThreadHandlerPrivate::scanLibrary(const LibraryScanRequest& request)
 {
+    if(const auto provider = m_providers ? m_providers->providerForPath(request.library.path) : nullptr) {
+        syncProviderLibrary(request, *provider);
+        return;
+    }
+
     const LibraryScanConfig config = currentScanConfig(m_settings);
     QMetaObject::invokeMethod(&m_scanner, [this, request, config, token = m_scanner.prepareWork()]() {
         m_scanner.scanLibrary(request.library, request.libraryTracks, request.onlyModified, config, token, request.id);
     });
+}
+
+void LibraryThreadHandlerPrivate::syncProviderLibrary(const LibraryScanRequest& request, LibraryProvider& provider)
+{
+    const int id = request.id;
+    provider.fetchTracks(request.library, [this, self = QPointer{m_self}, id](std::optional<TrackList> tracks) {
+        if(!self) {
+            return;
+        }
+
+        const auto* current = this->request(id);
+        if(!current || id != m_currentRequestId) {
+            return;
+        }
+        if(!tracks || current->cancelled) {
+            if(!tracks) {
+                qCWarning(LIB_THREAD) << "Failed to fetch tracks of library" << current->library.name;
+            }
+            finishScanRequest(id);
+            return;
+        }
+
+        QMetaObject::invokeMethod(&m_scanner,
+                                  [this, library = current->library, existingTracks = m_library->tracks(),
+                                   providerTracks = std::move(*tracks), id, token = m_scanner.prepareWork()]() {
+                                      m_scanner.syncLibrary(library, existingTracks, providerTracks, token, id);
+                                  });
+    });
+}
+
+bool LibraryThreadHandlerPrivate::isProviderPath(const QString& path) const
+{
+    return m_providers && m_providers->providerForPath(path);
 }
 
 void LibraryThreadHandlerPrivate::scanTracks(const LibraryScanRequest& request)
@@ -348,8 +391,11 @@ ScanRequest LibraryThreadHandlerPrivate::addTracksScanRequest(const TrackList& t
     LibraryScanRequest libraryRequest;
     libraryRequest.id           = id;
     libraryRequest.type         = ScanRequest::Tracks;
-    libraryRequest.tracks       = tracks;
     libraryRequest.onlyModified = onlyModified;
+
+    // Provider tracks have no file to read; their metadata comes from library syncs
+    std::ranges::copy_if(tracks, std::back_inserter(libraryRequest.tracks),
+                         [this](const Track& track) { return !isProviderPath(track.filepath()); });
 
     m_scanRequests.emplace_front(libraryRequest);
 
@@ -610,7 +656,11 @@ void LibraryThreadHandlerPrivate::completeScanRequest(const int id)
 void LibraryThreadHandlerPrivate::setupWatchers(const LibraryInfoMap& libraries, bool monitorDirectories,
                                                 bool monitorTrackFiles)
 {
-    PendingWatcherSetup setup{.libraries          = libraries,
+    LibraryInfoMap localLibraries;
+    std::ranges::copy_if(libraries, std::inserter(localLibraries, localLibraries.end()),
+                         [this](const auto& library) { return !isProviderPath(library.second.path); });
+
+    PendingWatcherSetup setup{.libraries          = localLibraries,
                               .tracks             = m_library->libraryTracks(),
                               .monitorDirectories = monitorDirectories,
                               .monitorTrackFiles  = monitorTrackFiles};
@@ -1107,6 +1157,11 @@ LibraryThreadHandler::~LibraryThreadHandler()
     p->m_thread.wait();
     p->m_databaseThread.wait();
     p->m_monitorThread.wait();
+}
+
+void LibraryThreadHandler::setLibraryProviders(std::shared_ptr<LibraryProviderRegistry> providers)
+{
+    p->m_providers = std::move(providers);
 }
 
 void LibraryThreadHandler::getAllTracks()

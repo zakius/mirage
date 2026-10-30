@@ -33,6 +33,7 @@
 
 #include <core/engine/audioloader.h>
 #include <core/engine/input/ratingtagpolicy.h>
+#include <core/library/libraryprovider.h>
 #include <utils/database/dbconnectionhandler.h>
 #include <utils/database/dbconnectionpool.h>
 #include <utils/database/dbconnectionprovider.h>
@@ -52,6 +53,7 @@
 #include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QThread>
+#include <QTimer>
 
 #include <gtest/gtest.h>
 
@@ -408,6 +410,42 @@ private:
     std::shared_ptr<FakeArchiveReaderState> m_state;
 };
 
+class FakeLibraryProvider : public Fooyin::LibraryProvider
+{
+public:
+    [[nodiscard]] QString scheme() const override
+    {
+        return u"fake"_s;
+    }
+
+    void fetchTracks(const Fooyin::LibraryInfo& /*library*/, FetchCallback callback) override
+    {
+        QTimer::singleShot(0, [tracks = tracks, callback = std::move(callback)]() { callback(tracks); });
+    }
+
+    [[nodiscard]] Fooyin::RemoteStreamSource createStreamSource(const QUrl& /*url*/) const override
+    {
+        return {};
+    }
+
+    [[nodiscard]] QUrl resolveUrl(const QUrl& url) const override
+    {
+        return url;
+    }
+
+    std::optional<Fooyin::TrackList> tracks;
+};
+
+Fooyin::Track providerTrack(const QString& id, const QString& title)
+{
+    Fooyin::Track track{u"fake://server/song/"_s + id};
+    track.setTitle(title);
+    track.setArtists({u"Artist"_s});
+    track.setAlbum(u"Album"_s);
+    track.setDuration(180000);
+    return track;
+}
+
 struct LibraryTestContext
 {
     LibraryTestContext()
@@ -527,6 +565,76 @@ TEST_F(UnifiedMusicLibraryTest, ScanForChangesMakesTracksVisibleBeforeScanFinish
     EXPECT_EQ(tracksAtFinish, 2);
     EXPECT_EQ(context().library.tracks().size(), 2);
     EXPECT_EQ(sortedTrackTitles(context().library.tracks()), (QStringList{u"Added Later"_s, u"Initial"_s}));
+}
+
+TEST_F(UnifiedMusicLibraryTest, ProviderLibrarySyncStoresUpdatesAndRemovesTracks)
+{
+    auto provider  = std::make_shared<FakeLibraryProvider>();
+    auto providers = std::make_shared<LibraryProviderRegistry>();
+    providers->addProvider(provider);
+    context().library.setLibraryProviders(providers);
+
+    const int libraryId = insertLibrary(context().dbPool, u"fake://server"_s, u"Server"_s);
+    ASSERT_GT(libraryId, 0);
+    context().libraryManager.reset();
+    const LibraryInfo libraryInfo = context().libraryManager.libraryInfo(libraryId).value_or(LibraryInfo{});
+
+    Track lovedTrack = providerTrack(u"1"_s, u"One"_s);
+    lovedTrack.setLoved(true);
+    lovedTrack.setRatingStars(8);
+    lovedTrack.setPlayCount(3);
+    provider->tracks = TrackList{lovedTrack, providerTrack(u"2"_s, u"Two"_s)};
+
+    const auto syncAndExpect = [&](const ScanSummaryCounts& expected) {
+        QSignalSpy summarySpy{&context().library, &MusicLibrary::scanSummary};
+        const ScanRequest request = context().library.refresh(libraryInfo);
+        expectSummarySignal(waitForSignal(summarySpy), request.id, ScanRequest::Library, expected);
+    };
+
+    syncAndExpect({.added = 2, .updated = 0, .removed = 0});
+    ASSERT_EQ(context().library.libraryTracks().size(), 2);
+
+    const auto findTrack = [&](const QString& title) {
+        const TrackList tracks = context().library.libraryTracks();
+        const auto it = std::ranges::find_if(tracks, [&title](const Track& track) { return track.title() == title; });
+        return it != tracks.cend() ? *it : Track{};
+    };
+
+    const Track storedTrack = findTrack(u"One"_s);
+    EXPECT_EQ(storedTrack.libraryId(), libraryId);
+    EXPECT_TRUE(storedTrack.isLoved());
+    EXPECT_EQ(storedTrack.ratingStars(), 8);
+    EXPECT_EQ(storedTrack.playCount(), 3);
+
+    syncAndExpect({.added = 0, .updated = 0, .removed = 0});
+
+    provider->tracks = TrackList{providerTrack(u"1"_s, u"One (Remastered)"_s)};
+    syncAndExpect({.added = 0, .updated = 1, .removed = 1});
+
+    const TrackList tracks = context().library.libraryTracks();
+    ASSERT_EQ(tracks.size(), 1);
+    EXPECT_EQ(tracks.front().title(), u"One (Remastered)"_s);
+    EXPECT_EQ(tracks.front().id(), storedTrack.id());
+}
+
+TEST_F(UnifiedMusicLibraryTest, FailedProviderFetchKeepsTracks)
+{
+    auto provider  = std::make_shared<FakeLibraryProvider>();
+    auto providers = std::make_shared<LibraryProviderRegistry>();
+    providers->addProvider(provider);
+    context().library.setLibraryProviders(providers);
+
+    const int libraryId = insertLibrary(context().dbPool, u"fake://server"_s, u"Server"_s);
+    context().libraryManager.reset();
+    const LibraryInfo libraryInfo = context().libraryManager.libraryInfo(libraryId).value_or(LibraryInfo{});
+
+    provider->tracks = TrackList{providerTrack(u"1"_s, u"One"_s)};
+    waitForSuccessfulScan([&]() { return context().library.refresh(libraryInfo); });
+    ASSERT_EQ(context().library.libraryTracks().size(), 1);
+
+    provider->tracks.reset();
+    waitForSuccessfulScan([&]() { return context().library.refresh(libraryInfo); });
+    EXPECT_EQ(context().library.libraryTracks().size(), 1);
 }
 
 TEST_F(UnifiedMusicLibraryTest, ExcludingArchiveTypeRemovesPreviouslyIndexedEntries)

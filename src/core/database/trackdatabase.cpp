@@ -199,6 +199,9 @@ bool TrackDatabase::storeTracks(TrackList& tracks)
             if(track.rating() > 0) {
                 importedStats |= Track::Stat::Rating;
             }
+            if(track.isLoved()) {
+                importedStats |= Track::Stat::Loved;
+            }
 
             StoredTrackStats stats;
             if(!insertOrUpdateStats(track, &stats, importedStats)) {

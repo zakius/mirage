@@ -29,6 +29,7 @@
 
 namespace Fooyin {
 class AudioLoader;
+class LibraryProviderRegistry;
 class LibraryThreadHandlerPrivate;
 class MusicLibrary;
 class PlaylistLoader;
@@ -53,6 +54,8 @@ public:
                                   std::shared_ptr<AudioLoader> audioLoader, std::shared_ptr<RemoteIoService> remoteIo,
                                   SettingsManager* settings, QObject* parent = nullptr);
     ~LibraryThreadHandler() override;
+
+    void setLibraryProviders(std::shared_ptr<LibraryProviderRegistry> providers);
 
     void getAllTracks();
 

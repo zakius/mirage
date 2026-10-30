@@ -26,6 +26,7 @@
 namespace Fooyin {
 struct LibraryInfo;
 class LibraryManager;
+class LibraryProviderRegistry;
 class RemoteIoService;
 class SettingsManager;
 class UnifiedMusicLibraryPrivate;
@@ -40,6 +41,8 @@ public:
                         std::shared_ptr<RemoteIoService> remoteIo, SettingsManager* settings,
                         QObject* parent = nullptr);
     ~UnifiedMusicLibrary() override;
+
+    void setLibraryProviders(std::shared_ptr<LibraryProviderRegistry> providers);
 
     [[nodiscard]] bool hasLibrary() const override;
     [[nodiscard]] std::optional<LibraryInfo> libraryInfo(int id) const override;

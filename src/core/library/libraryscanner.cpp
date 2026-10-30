@@ -191,6 +191,38 @@ void LibraryScanner::scanLibraryDirectoies(const LibraryInfo& library, const QSt
     clearSession();
 }
 
+void LibraryScanner::syncLibrary(const LibraryInfo& library, const TrackList& tracks, const TrackList& providerTracks,
+                                 std::stop_token token, int requestId)
+{
+    m_requestId = requestId;
+    if(!startWork(token)) {
+        Q_EMIT scanFinished(requestId);
+        return;
+    }
+
+    m_progressOnlyModified = false;
+    startSession({}, library);
+    changeLibraryStatus(LibraryInfo::Status::Scanning);
+
+    const Timer timer;
+
+    m_session->syncLibrary(library, tracks, providerTracks);
+
+    if(state() == Paused) {
+        changeLibraryStatus(LibraryInfo::Status::Pending);
+    }
+    else {
+        changeLibraryStatus(LibraryInfo::Status::Idle);
+        finishSession();
+        setState(Idle);
+        Q_EMIT scanFinished(m_requestId);
+    }
+
+    qCInfo(LIB_SCANNER) << "Sync of" << library.name << "took" << timer.elapsedFormatted();
+
+    clearSession();
+}
+
 void LibraryScanner::scanTracks(const TrackList& tracks, const bool onlyModified, const LibraryScanConfig& config,
                                 std::stop_token token, int requestId)
 {

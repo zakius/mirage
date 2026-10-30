@@ -38,6 +38,7 @@
 #include <QLoggingCategory>
 
 #include <ranges>
+#include <unordered_map>
 
 Q_DECLARE_LOGGING_CATEGORY(LIB_SCANNER)
 
@@ -344,6 +345,71 @@ bool LibraryScanSession::scanLibrary(const LibraryInfo& library, const TrackList
     }
 
     return completed;
+}
+
+bool LibraryScanSession::syncLibrary(const LibraryInfo& library, const TrackList& tracks,
+                                     const TrackList& providerTracks)
+{
+    reset(library);
+
+    m_phase = ScanProgress::Phase::ReadingMetadata;
+    m_state.setProgressPhase(m_phase, providerTracks.size());
+    m_state.reportProgress({});
+
+    std::unordered_map<QString, Track> existingTracks;
+    for(const Track& track : tracks) {
+        existingTracks.emplace(track.filepath(), track);
+    }
+
+    std::set<QString> seenPaths;
+    const auto now = static_cast<uint64_t>(QDateTime::currentMSecsSinceEpoch());
+
+    for(Track track : providerTracks) {
+        if(!m_state.mayRun()) {
+            return false;
+        }
+
+        track.setLibraryId(library.id);
+        track.setIsEnabled(true);
+        track.setMetadataWasRead(true);
+        track.clearWasModified();
+        track.generateHash();
+
+        if(const auto existingIt = existingTracks.find(track.filepath()); existingIt != existingTracks.cend()) {
+            Track existing{existingIt->second};
+            existing.clearWasModified();
+
+            track.setId(existing.id());
+            if(track.addedTime() == 0) {
+                track.setAddedTime(existing.addedTime());
+            }
+            if(!track.sameDataAs(existing)) {
+                m_writer.updateTrack(track);
+            }
+        }
+        else {
+            if(track.addedTime() == 0) {
+                track.setAddedTime(now);
+            }
+            m_writer.storeTrack(track);
+        }
+
+        seenPaths.emplace(track.filepath());
+        m_state.progressScanned(track.filepath());
+        maybeFlushWriter();
+    }
+
+    for(const auto& [path, track] : existingTracks) {
+        if(track.libraryId() == library.id && !seenPaths.contains(path)) {
+            Track disabledTrack{track};
+            disabledTrack.setLibraryId(-1);
+            disabledTrack.setIsEnabled(false);
+            m_writer.updateTrack(disabledTrack);
+        }
+    }
+
+    flushWriter(true);
+    return true;
 }
 
 bool LibraryScanSession::scanDirectories(const LibraryInfo& library, const QStringList& dirs, const TrackList& tracks)

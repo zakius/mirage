@@ -77,6 +77,8 @@ public Q_SLOTS:
     void scanLibraryDirectoies(const Fooyin::LibraryInfo& library, const QStringList& dirs,
                                const Fooyin::TrackList& tracks, const Fooyin::LibraryScanConfig& config,
                                std::stop_token token, int requestId);
+    void syncLibrary(const Fooyin::LibraryInfo& library, const Fooyin::TrackList& tracks,
+                     const Fooyin::TrackList& providerTracks, std::stop_token token, int requestId);
     void scanTracks(const Fooyin::TrackList& tracks, bool onlyModified, const Fooyin::LibraryScanConfig& config,
                     std::stop_token token, int requestId);
     void scanFiles(const Fooyin::TrackList& libraryTracks, const QList<QUrl>& urls,

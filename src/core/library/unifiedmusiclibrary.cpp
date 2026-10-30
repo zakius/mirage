@@ -989,6 +989,11 @@ std::optional<LibraryInfo> UnifiedMusicLibrary::libraryForPath(const QString& pa
     return {};
 }
 
+void UnifiedMusicLibrary::setLibraryProviders(std::shared_ptr<LibraryProviderRegistry> providers)
+{
+    p->m_threadHandler.setLibraryProviders(std::move(providers));
+}
+
 void UnifiedMusicLibrary::loadAllTracks()
 {
     p->m_threadHandler.getAllTracks();
