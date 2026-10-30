@@ -93,7 +93,9 @@ std::vector<QUrl> remoteArtworkUrls(const Track& track)
         for(const QString& value : values) {
             const QUrl url{value.trimmed()};
             const QString scheme = url.scheme().toLower();
-            if(!url.isValid() || url.isRelative() || (scheme != "http"_L1 && scheme != "https"_L1)) {
+            // Virtual tracks may use their own scheme, which RemoteIoService resolves through a library provider
+            const bool isOwnScheme = track.isVirtual() && scheme == QUrl{track.filepath()}.scheme().toLower();
+            if(!url.isValid() || url.isRelative() || (scheme != "http"_L1 && scheme != "https"_L1 && !isOwnScheme)) {
                 continue;
             }
             const QString key = url.toString();
@@ -123,7 +125,7 @@ QString generateGroupedCoverKey(const QString& group, Track::Cover type, Artwork
 
 QString generateTrackCoverKey(const Track& track, Track::Cover type, ArtworkSourcePreference sourcePreference)
 {
-    if(track.isRemote() && type == Track::Cover::Front) {
+    if((track.isRemote() || track.isVirtual()) && type == Track::Cover::Front) {
         if(const auto url = remoteArtworkUrl(track)) {
             return Utils::generateHash(
                 u"FyRemoteCover|%1|%2"_s.arg(static_cast<int>(type)).arg(static_cast<int>(sourcePreference)),
@@ -428,7 +430,8 @@ bool hasEmbeddedCover(const CoverLoader& loader)
 
 bool hasRemoteArtwork(const CoverLoader& loader)
 {
-    return loader.type == Track::Cover::Front && loader.track.isRemote() && !remoteArtworkUrls(loader.track).empty();
+    return loader.type == Track::Cover::Front && (loader.track.isRemote() || loader.track.isVirtual())
+        && !remoteArtworkUrls(loader.track).empty();
 }
 
 QImage loadImageFromEmbedded(const CoverLoader& loader, const QString& cachePath)
@@ -732,7 +735,7 @@ void CoverRepositoryPrivate::applyCoverFallback(CoverLoader& loader) const
 QString CoverRepositoryPrivate::thumbnailCoverKey(const Track& track, Track::Cover type,
                                                   ArtworkSourcePreference sourcePreference) const
 {
-    if(track.isRemote() && type == Track::Cover::Front) {
+    if((track.isRemote() || track.isVirtual()) && type == Track::Cover::Front) {
         if(const auto url = remoteArtworkUrl(track)) {
             return Utils::generateHash(
                 u"FyRemoteCover|%1|%2"_s.arg(static_cast<int>(type)).arg(static_cast<int>(sourcePreference)),
