@@ -9,7 +9,8 @@ Server-specific behaviour (for example oasis merging a local library with a stre
 and is invisible to the client.
 
 mirage is Subsonic only: its library consists of Subsonic servers, never folders, and its playlists live on the
-server. Single files can still be opened or dropped onto a playlist. It runs as "mirage" with its own configuration,
+server. Local files cannot be opened, added or dropped in, and fooyin's features for local files are hidden (see
+"Local media"). It runs as "mirage" with its own configuration,
 database and MPRIS name, so it does not touch a fooyin install on the same machine.
 
 The work has two layers:
@@ -156,6 +157,13 @@ Subsonic API documentation.
   - `created` as the added time, `playCount`, `played` as the last-played time, `userRating` as stars, `starred` as
     loved
   - an `ARTWORKURL` tag with `<library path>/cover/<coverArt>`
+  - composers and performers from OpenSubsonic `contributors` (`displayComposer` if there are no composers), and the
+    comment
+  - extra tags for fields without a track field, set only where the server sends them: `SUFFIX`, `CONTENTTYPE`,
+    `SERVERPATH` (`path`), `AVERAGERATING`, `TITLESORT` (`sortName`), `DISPLAYARTIST`, `DISPLAYALBUMARTIST`, `MOOD`,
+    `BPM`, `MUSICBRAINZ_TRACKID`, `ISRC`, `EXPLICITSTATUS`, `WORK` (`works`), `MOVEMENT` (`movements`),
+    `REPLAYGAIN_BASE_GAIN`, `REPLAYGAIN_FALLBACK_GAIN`, and one tag per other contributor role (for example
+    `PRODUCER`), with the sub-role in parentheses
 
   If a server rejects an empty `search3` query (error 10) or returns no songs for it, the plugin falls back to walking
   `getAlbumList2` (`alphabeticalByName`) and `getAlbum`. Other errors, such as wrong credentials, fail the sync and
@@ -231,6 +239,47 @@ Subsonic API documentation.
   without local file changes. When fooyin's own "auto refresh" is on, that refresh covers it instead. "Scan for
   changes" and the library settings page also sync.
 
+## Local media
+
+mirage has no local files, so fooyin's features for local files and local media (CDs) are hidden or turned off. The
+code stays, so rebasing on fooyin stays cheap and a feature comes back by removing its id from one list.
+
+- **The gate.** `Mirage::isLocalMediaId()` (`utils/mirage.h`) lists the ids of actions, track menu entries, settings
+  pages and widgets for local media. `ActionManager::registerAction()` hides those actions, which also turns off their
+  shortcuts; the track context menus and their settings page skip those entries; the settings dialog skips those
+  pages; and `WidgetProvider` does not offer those widgets. Hidden this way:
+  - File: Add files, Add folders, Load playlist, Save playlist, Save all playlists, Open audio CD (cdda)
+  - track menus: Open containing folder, Copy file path, Copy directory path, artwork search, extraction, attaching
+    and removal, the Tagging submenu (metadata lookup, Reload tags, the quick tagger and the tag editor's auto-fill),
+    Convert, Verify integrity, Verify with AccurateRip, and the Lyrics submenu (edit, search and save lyrics of
+    selected tracks)
+  - settings pages: Playlist > Saving, Lyrics > Saving, Interface > Artwork > Download, Integrations > System (opening
+    files), Playback > Decoding (the decoders stay; server streams always use FFmpeg), Tagging > Quick Tagger
+  - widgets: Directory Browser
+- **Read-only metadata.** Subsonic cannot edit song metadata. `Track::isMetadataEditable()` is false for tracks
+  without a local file (`isDatabaseOnlyMetadata()`), so the tag editor, playlist cell editing and the lyrics editor
+  are read-only for server tracks. Ratings and loves still go to the server. The properties dialog is the read-only
+  full view: the tag editor's Metadata tab lists only the fields the server sent, the Details tab shows extended
+  metadata (all extra tags) and ReplayGain by default and adds disc, composer, performer, comment and rating to its
+  default fields, and Apply is hidden for server tracks. The ReplayGain and Artwork editor tabs are not registered.
+- **No local writes for server tracks.** The lyrics saver refuses server tracks (lyrics from services are shown but not
+  saved), the cover widget and lyrics widget hide their write and extract actions for them, and
+  `Utils::File::openDirectory()` ignores paths that are not local folders, which catches "Open containing folder"
+  still set as a click action or script command in an older configuration. The status bar and cover widget no longer
+  offer that click action, and the `playingfolder` script command is unavailable for server tracks.
+- **No local files in.** `GuiApplication::openFiles()` drops local files (command line and second instances), the
+  desktop file has no `%F` and no MIME types, and drags from other applications that carry local files are refused.
+  Drags that start inside mirage (library tree nodes and tracks into playlists, between playlists and to the queue)
+  work as in fooyin, and plugin packages can still be dropped onto the plugins page.
+- **Plugins off by default.** File Operations, the ReplayGain scanner and Run Services are in the default
+  `Plugins/Disabled` list and can be turned on in Settings > Plugins. The tag editor, quick tagger and cdda plugins
+  stay loaded for the planned CD upload (see "Backlog"); their actions are hidden by the gate.
+- **Folder libraries from older builds** stay in the database. `Application` calls
+  `LibraryManager::setProvidersOnly(true)`, which hides them and their tracks; they are not scanned or monitored.
+- **Not hidden:** Add stream URL, waveform data (Utilities; it decodes the stream into mirage's own cache), layout,
+  theme and preset import and export, the plugin installer, and the now-playing text output. Local tracks already in
+  playlists from older builds stay and play.
+
 ## Branches
 
 - `library-providers`, on `master`: only the generic API commits, each tagged `[core]`, `[gui]` or `[scrobbler]` as
@@ -239,8 +288,8 @@ Subsonic API documentation.
   `[mirage]` commits: the application name and profile, install names (binary `mirage`, `lib/mirage`,
   `share/mirage`, desktop file, metainfo and icons as `io.github.zakius.mirage`, so it installs next to fooyin), and
   Subsonic-only libraries (`LibraryManager` refuses folder
-  paths; the library settings page hides folder settings and sends "Add" to the Subsonic page). Rebase it when the API
-  branch changes.
+  paths; the library settings page hides folder settings and sends "Add" to the Subsonic page), and the `[mirage]`
+  commits that hide local media (see "Local media"). Rebase it when the API branch changes.
 
 ## Order of work
 
@@ -324,6 +373,22 @@ Korean, Chinese and Latin tags and `.lrc` files:
   and off for one with it.
 - With the Subsonic plugin disabled, the default views show the original names.
 
+Verified on 2026-11-01 against oasis master with a generated 5-track library (FLAC and MP3), in an isolated profile on
+Xvfb that plays to a PulseAudio null sink:
+
+- The File menu offers only Add stream URL, New playlist, New autoplaylist and Quit. The Edit, View, Layout, Playback
+  and Library menus have no local-file actions. Settings has no Decoding, Playlist Saving, Lyrics Saving,
+  Integrations > System or Quick Tagger page; the ReplayGain scanner is off.
+- The track context menus of the library tree, playlists and status bar, the cover widget menu, the playlist tab menu
+  and the lyrics widget menu have no local-file actions. Artwork offers only View full size.
+- Properties of a server track: the Metadata tab is read-only and lists only the fields the server sent, the Details
+  tab shows them all, and there is no Apply.
+- Dragging an artist node from the library tree into a playlist adds all its tracks. Dragging tracks onto another
+  playlist's tab and into the playback queue works. A local file dragged in from another application is refused; an
+  http URL dragged the same way is accepted.
+- A local file passed to a second instance on the command line opens nothing.
+- Nothing is written next to the music or under a `subsonic:` path.
+
 Limits:
 
 - New playlists go to the default server. Moving a playlist to another server is not supported.
@@ -338,3 +403,19 @@ Limits:
   that is how views learn that their names changed.
 - Playlists are read again only after a library sync (at start, or "Scan for changes"), so a playlist the server
   grows (oasis radio) lags until then.
+
+## Backlog
+
+**CD ripping and album upload to the server (needs the server's `upload` extension).**
+
+- Only for servers listing an `upload` OpenSubsonic extension; hidden on every other server.
+- Flow: read the disc's TOC and MusicBrainz disc id (the cdda plugin's `cddatoc.h` already computes it) →
+  `lookupDisc` (the server returns MusicBrainz release candidates) → `createUpload` with the chosen release or user
+  tags → `uploadTrack` per track as FLAC encoded locally (via the `formPost` extension), resumable → `commitUpload`
+  (the server tags, names, adds cover art, scans; nothing appears half-done).
+- The same flow uploads an existing file or album without a CD.
+- Later: AccurateRip verification.
+- Desktop only; caravan won't have it.
+
+The cdda plugin, the tag editor and the quick tagger stay in the build for this; the local media gate hides their
+actions until then.
