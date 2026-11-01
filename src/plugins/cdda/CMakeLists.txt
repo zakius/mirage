@@ -20,6 +20,7 @@ create_fooyin_plugin_internal(
         accuraterip.h
         cddadecoder.cpp
         cddadecoder.h
+        cddadiscripper.h
         cddadrivemanager.cpp
         cddadrivemanager.h
         cddadrivesettings.cpp

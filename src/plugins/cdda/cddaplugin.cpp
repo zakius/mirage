@@ -43,9 +43,12 @@
 #include <utils/actions/actioncontainer.h>
 #include <utils/actions/actionmanager.h>
 #include <utils/actions/command.h>
+#include <utils/async.h>
+#include <utils/mirage.h>
 #include <utils/utils.h>
 
 #include <QAction>
+#include <QInputDialog>
 #include <QMainWindow>
 #include <QNetworkReply>
 #include <QPointer>
@@ -68,6 +71,7 @@ void CddaPlugin::initialise(const GuiPluginContext& context)
 {
     m_playlistController = context.playlistSelection;
     m_conversionService  = context.conversionService;
+    Mirage::setDiscRipper(this);
 
     auto* openAction = new QAction(tr("Open audio &CD…"), this);
     openAction->setStatusTip(tr("Open an audio CD for playback or ripping"));
@@ -177,45 +181,51 @@ void CddaPlugin::startRip(RipAudioCdDialog* dialog, TrackList tracks, CdToc toc,
         return;
     }
 
+    lookupAccurateRip(toc, tracks, dialog,
+                      [this, dialog, tracks, presetId = std::move(presetId),
+                       showSetup](std::shared_ptr<AccurateRip::Verifier> verifier, QString message) {
+                          startConversion(dialog, tracks, presetId, showSetup, std::move(verifier), std::move(message));
+                      });
+}
+
+void CddaPlugin::lookupAccurateRip(const CdToc& toc, const TrackList& tracks, QObject* context,
+                                   std::function<void(std::shared_ptr<AccurateRip::Verifier>, QString message)> done)
+{
     const auto discId = accurateRipDiscId(toc);
     if(!discId) {
-        startConversion(dialog, tracks, presetId, showSetup, {}, discId.error());
+        done({}, discId.error());
         return;
     }
     const auto layout = accurateRipLayout(toc);
     if(!layout) {
-        startConversion(dialog, tracks, presetId, showSetup, {}, layout.error());
+        done({}, layout.error());
         return;
     }
 
     QNetworkReply* reply = m_networkAccess->get(makeNetworkRequest(accurateRipDiscUrl(*discId)));
     QObject::connect(reply, &QNetworkReply::finished, reply, &QObject::deleteLater);
-    QObject::connect(reply, &QNetworkReply::finished, dialog,
-                     [this, dialog, reply, tracks = std::move(tracks), presetId = std::move(presetId), discId = *discId,
-                      layout = *layout, showSetup]() {
+    QObject::connect(reply, &QNetworkReply::finished, context,
+                     [reply, tracks, discId = *discId, layout = *layout, done = std::move(done)]() {
                          if(reply->error() != QNetworkReply::NoError) {
-                             startConversion(dialog, tracks, presetId, showSetup, {},
-                                             reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() == 404
-                                                 ? tr("This disc is not present in AccurateRip.")
-                                                 : tr("AccurateRip lookup failed: %1").arg(reply->errorString()));
+                             done({}, reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() == 404
+                                          ? tr("This disc is not present in AccurateRip.")
+                                          : tr("AccurateRip lookup failed: %1").arg(reply->errorString()));
                              return;
                          }
 
                          const QByteArray payload = reply->read((8 * 1024 * 1024) + 1);
                          if(payload.size() > 8L * 1024 * 1024) {
-                             startConversion(dialog, tracks, presetId, showSetup, {},
-                                             tr("AccurateRip returned an unexpectedly large disc record."));
+                             done({}, tr("AccurateRip returned an unexpectedly large disc record."));
                              return;
                          }
 
                          const auto records = parseAccurateRipResponse(payload, discId);
                          if(!records) {
-                             startConversion(dialog, tracks, presetId, showSetup, {}, records.error());
+                             done({}, records.error());
                              return;
                          }
 
-                         startConversion(dialog, tracks, presetId, showSetup,
-                                         std::make_shared<AccurateRip::Verifier>(layout, *records, tracks));
+                         done(std::make_shared<AccurateRip::Verifier>(layout, *records, tracks), {});
                      });
 }
 
@@ -242,6 +252,117 @@ void CddaPlugin::startConversion(RipAudioCdDialog* dialog, const TrackList& trac
     else {
         dialog->ripStartFailed();
     }
+}
+
+void CddaPlugin::chooseDisc(QWidget* parent, std::function<void(TrackList tracks, QString error)> done)
+{
+    Utils::asyncExec([manager = m_driveManager]() {
+        std::vector<CdDriveObservation> discs;
+        for(CdDriveObservation& observation : manager->observations(true)) {
+            if(observation.toc && !observation.discId.isEmpty()) {
+                if(!observation.cdText) {
+                    observation.cdText = manager->readCdText(observation).value_or(CdText{});
+                }
+                discs.push_back(std::move(observation));
+            }
+        }
+        return discs;
+    }).then(this, [parent = QPointer{parent}, done = std::move(done)](const std::vector<CdDriveObservation>& discs) {
+        if(discs.empty()) {
+            done({}, tr("No audio CD found. Insert a disc and try again."));
+            return;
+        }
+
+        int index{0};
+        if(discs.size() > 1) {
+            QStringList names;
+            for(const CdDriveObservation& disc : discs) {
+                const QString title = disc.cdText ? disc.cdText->disc.title : QString{};
+                names.append(title.isEmpty() ? disc.drive.displayName
+                                             : u"%1 (%2)"_s.arg(title, disc.drive.displayName));
+            }
+            bool ok{false};
+            const QString name = QInputDialog::getItem(parent, tr("Choose Audio CD"), tr("Disc:"), names, 0, false, &ok);
+            if(!ok) {
+                done({}, {});
+                return;
+            }
+            index = static_cast<int>(names.indexOf(name));
+        }
+
+        const CdDriveObservation& disc = discs.at(index);
+        auto tracks                    = tracksForDisc(*disc.toc, disc.discId, disc.cdText.value_or(CdText{}));
+        if(!tracks) {
+            done({}, tracks.error());
+            return;
+        }
+        done(*tracks, {});
+    });
+}
+
+void CddaPlugin::ripToFolder(const TrackList& tracks, const QString& folder, std::function<void(Rip)> done)
+{
+    const QString discId = tracks.empty() ? QString{} : discProperty(tracks.front(), DiscIdProperty);
+
+    Utils::asyncExec([manager = m_driveManager, discId]() {
+        return manager->resolveDisc(discId);
+    }).then(this, [this, tracks, folder, done = std::move(done)](std::expected<CdDriveObservation, CdError> disc) {
+        if(!disc || !disc->toc) {
+            Rip rip;
+            rip.error = disc ? tr("The disc has no table of contents.") : disc.error().message;
+            done(rip);
+            return;
+        }
+
+        lookupAccurateRip(*disc->toc, tracks, this,
+                          [this, tracks, folder, done](std::shared_ptr<AccurateRip::Verifier> verifier,
+                                                       const QString& message) {
+                              ConversionJob job;
+                              job.tracks          = tracks;
+                              job.preset.name     = tr("Rip to FLAC");
+                              job.preset.encoder.profile = {.id               = u"flac"_s,
+                                                            .formatId         = u"flac"_s,
+                                                            .name             = u"FLAC"_s,
+                                                            .extension        = u"flac"_s,
+                                                            .containerName    = u"flac"_s,
+                                                            .codecName        = u"flac"_s,
+                                                            .mode             = EncoderMode::LosslessCompression,
+                                                            .bitrateKbps      = 0,
+                                                            .quality          = 0.0,
+                                                            .compressionLevel = 5};
+                              job.preset.destination = {.mode             = DestinationMode::FixedFolder,
+                                                        .fixedFolder      = folder,
+                                                        .filenamePattern  = u"%tracknumber%"_s,
+                                                        .existingFileMode = ExistingFileMode::Overwrite,
+                                                        .outputStyle      = OutputStyle::IndividualFiles};
+
+                              m_conversionService->startJob(
+                                  job, verifier,
+                                  [verifier, message, done](const std::vector<ConversionTrackResult>& results) {
+                                      Rip rip;
+                                      for(const ConversionTrackResult& result : results) {
+                                          if(result.status == ConversionResultStatus::Cancelled) {
+                                              rip.cancelled = true;
+                                          }
+                                          else if(result.status != ConversionResultStatus::Succeeded) {
+                                              rip.error = result.error.isEmpty() ? tr("A track could not be ripped.")
+                                                                                 : result.error;
+                                          }
+                                          rip.files.append(result.outputPath);
+                                      }
+
+                                      const auto verified = verifier ? verifier->results()
+                                                                     : std::vector<AccurateRip::TrackResult>{};
+                                      rip.accurateRipMismatch = std::ranges::any_of(verified, [](const auto& track) {
+                                          return track.status == AccurateRip::VerifyStatus::Mismatch;
+                                      });
+                                      if(!rip.cancelled && rip.error.isEmpty()) {
+                                          showAccurateRipResults(Utils::getMainWindow(), verified, message);
+                                      }
+                                      done(rip);
+                                  });
+                          });
+    });
 }
 
 QString CddaPlugin::inputName() const

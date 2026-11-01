@@ -20,6 +20,7 @@
 #pragma once
 
 #include "accuraterip.h"
+#include "cddadiscripper.h"
 
 #include <core/engine/inputplugin.h>
 #include <core/plugins/coreplugin.h>
@@ -49,11 +50,12 @@ class CddaPlugin : public QObject,
                    public Plugin,
                    public CorePlugin,
                    public InputPlugin,
-                   public GuiPlugin
+                   public GuiPlugin,
+                   public DiscRipper
 {
     Q_OBJECT
     Q_PLUGIN_METADATA(IID FOOYIN_PLUGIN_IID FILE "cdda.json")
-    Q_INTERFACES(Fooyin::Plugin Fooyin::CorePlugin Fooyin::InputPlugin Fooyin::GuiPlugin)
+    Q_INTERFACES(Fooyin::Plugin Fooyin::CorePlugin Fooyin::InputPlugin Fooyin::GuiPlugin Fooyin::Cdda::DiscRipper)
 
 public:
     void initialise(const CorePluginContext& context) override;
@@ -62,12 +64,17 @@ public:
     [[nodiscard]] QString inputName() const override;
     [[nodiscard]] InputCreator inputCreator() const override;
 
+    void chooseDisc(QWidget* parent, std::function<void(TrackList tracks, QString error)> done) override;
+    void ripToFolder(const TrackList& tracks, const QString& folder, std::function<void(Rip)> done) override;
+
 private:
     void addToPlaylist(const TrackList& tracks, const CdDriveObservation& observation);
     void play(const TrackList& tracks, const CdDriveObservation& observation);
     void rip(const TrackList& tracks, const CdDriveObservation& observation);
     void startRip(RipAudioCdDialog* dialog, TrackList tracks, CdToc toc, QString presetId, bool showSetup,
                   bool verifyAccurateRip);
+    void lookupAccurateRip(const CdToc& toc, const TrackList& tracks, QObject* context,
+                           std::function<void(std::shared_ptr<AccurateRip::Verifier>, QString message)> done);
     void startConversion(RipAudioCdDialog* dialog, const TrackList& tracks, const QString& presetId, bool showSetup,
                          std::shared_ptr<AccurateRip::Verifier> verifier, QString lookupMessage = {});
 

@@ -23,6 +23,8 @@
 
 #include <utils/id.h>
 
+class QObject;
+
 namespace Fooyin::Mirage {
 /*!
  * The local media gate: returns @c true for the ids of actions, track menu entries, settings pages and widgets that
@@ -30,4 +32,11 @@ namespace Fooyin::Mirage {
  * hidden (and their actions disabled) instead of removed. Removing an id from the list brings its feature back.
  */
 FYUTILS_EXPORT bool isLocalMediaId(const Id& id);
+
+/*!
+ * The audio CD plugin registers its ripper here (a `Cdda::DiscRipper`, see `plugins/cdda/cddadiscripper.h`), so the
+ * Subsonic plugin can rip a CD to a server without either plugin linking the other. @c nullptr where there is none.
+ */
+FYUTILS_EXPORT void setDiscRipper(QObject* ripper);
+[[nodiscard]] FYUTILS_EXPORT QObject* discRipper();
 } // namespace Fooyin::Mirage

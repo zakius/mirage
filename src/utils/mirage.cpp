@@ -19,9 +19,14 @@
 
 #include <utils/mirage.h>
 
+#include <QPointer>
 #include <QStringList>
 
 using namespace Qt::StringLiterals;
+
+namespace {
+QPointer<QObject> ripper;
+} // namespace
 
 namespace Fooyin::Mirage {
 bool isLocalMediaId(const Id& id)
@@ -45,5 +50,15 @@ bool isLocalMediaId(const Id& id)
 
     const QString name = id.name();
     return ids.contains(name) || name.startsWith("Tracks.Convert"_L1) || name.startsWith("Tagging.QuickTagger"_L1);
+}
+
+void setDiscRipper(QObject* discRipper)
+{
+    ripper = discRipper;
+}
+
+QObject* discRipper()
+{
+    return ripper;
 }
 } // namespace Fooyin::Mirage
