@@ -496,6 +496,12 @@ bool ConversionController::startPreset(const QString& presetId, const TrackList&
     return true;
 }
 
+void ConversionController::startJob(ConversionJob job, std::shared_ptr<ConversionInputObserver> sourceObserver,
+                                    std::function<void(const std::vector<ConversionTrackResult>&)> completion)
+{
+    start(std::move(job), {}, false, false, std::move(sourceObserver), std::move(completion));
+}
+
 void ConversionController::start(ConversionJob job, QString askFolder, bool showReport, bool showOutputFiles)
 {
     start(std::move(job), std::move(askFolder), showReport, showOutputFiles, {}, {});

@@ -52,5 +52,8 @@ public:
     virtual bool startPreset(const QString& presetId, const TrackList& tracks, const QString& suggestedFilenamePattern,
                              std::shared_ptr<ConversionInputObserver> sourceObserver,
                              std::function<void(const std::vector<ConversionTrackResult>&)> completion) = 0;
+    //! Runs @p job as given, without a stored preset, and calls @p completion with the results.
+    virtual void startJob(ConversionJob job, std::shared_ptr<ConversionInputObserver> sourceObserver,
+                          std::function<void(const std::vector<ConversionTrackResult>&)> completion) = 0;
 };
 } // namespace Fooyin

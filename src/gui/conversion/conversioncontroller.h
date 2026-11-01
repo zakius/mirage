@@ -57,6 +57,8 @@ public:
     bool startPreset(const QString& presetId, const TrackList& tracks, const QString& suggestedFilenamePattern,
                      std::shared_ptr<ConversionInputObserver> sourceObserver,
                      std::function<void(const std::vector<ConversionTrackResult>&)> completion) override;
+    void startJob(ConversionJob job, std::shared_ptr<ConversionInputObserver> sourceObserver,
+                  std::function<void(const std::vector<ConversionTrackResult>&)> completion) override;
 
     void start(ConversionJob job, QString askFolder, bool showReport, bool showOutputFiles);
     void start(ConversionJob job, QString askFolder, bool showReport, bool showOutputFiles,
