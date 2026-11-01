@@ -65,8 +65,11 @@ using ResponseCallback = std::function<void(std::optional<QJsonObject> response,
 [[nodiscard]] QUrl apiUrl(const Account& account, const QString& method, QUrlQuery params = {});
 
 //! Calls the API @p method and invokes @p callback in the thread of @p context.
-void request(QNetworkAccessManager* network, const Account& account, const QString& method, const QUrlQuery& params,
-             QObject* context, ResponseCallback callback);
+QNetworkReply* request(QNetworkAccessManager* network, const Account& account, const QString& method,
+                       const QUrlQuery& params, QObject* context, ResponseCallback callback);
+//! POSTs @p body to the API @p method, with the authentication in the query, like request().
+QNetworkReply* post(QNetworkAccessManager* network, const Account& account, const QString& method,
+                    const QUrlQuery& params, const QByteArray& body, QObject* context, ResponseCallback callback);
 
 //! Describes a failed reply without its URL, which contains the authentication token.
 [[nodiscard]] QString replyError(const QNetworkReply* reply);
@@ -88,6 +91,9 @@ void request(QNetworkAccessManager* network, const Account& account, const QStri
  * scrobbles them itself.
  */
 [[nodiscard]] bool scrobblesLocally(std::optional<bool> choice, std::optional<bool> serverScrobbles);
+
+//! Returns getUser's `uploadRole`: whether the user may upload.
+[[nodiscard]] bool uploadRole(const QJsonObject& getUserResponse);
 
 //! True if a getOpenSubsonicExtensions response lists version @p version of the extension @p name.
 [[nodiscard]] bool hasExtension(const QJsonObject& response, const QString& name, int version);

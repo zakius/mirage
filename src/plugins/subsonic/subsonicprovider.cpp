@@ -249,6 +249,8 @@ void SubsonicProvider::removeAccount(const QString& libraryPath)
     m_accounts.erase(libraryPath);
     m_serverScrobbles.erase(libraryPath);
     m_romanization.erase(libraryPath);
+    m_uploadExtension.erase(libraryPath);
+    m_uploadRole.erase(libraryPath);
 }
 
 void SubsonicProvider::fetchServerInfo(const QString& libraryPath, const Account& account, std::function<void()> done)
@@ -269,6 +271,12 @@ void SubsonicProvider::fetchServerInfo(const QString& libraryPath, const Account
     call(account, u"getUser"_s, user, [this, libraryPath, finish](std::optional<QJsonObject> response, ApiError) {
         if(response) {
             const std::scoped_lock lock{m_mutex};
+            if(uploadRole(*response)) {
+                m_uploadRole.emplace(libraryPath);
+            }
+            else {
+                m_uploadRole.erase(libraryPath);
+            }
             if(const auto scrobbles = Subsonic::serverScrobbles(*response)) {
                 m_serverScrobbles[libraryPath] = *scrobbles;
             }
@@ -290,6 +298,12 @@ void SubsonicProvider::fetchServerInfo(const QString& libraryPath, const Account
                  else {
                      m_romanization.erase(libraryPath);
                  }
+                 if(response && hasExtension(*response, u"upload"_s, 1)) {
+                     m_uploadExtension.emplace(libraryPath);
+                 }
+                 else {
+                     m_uploadExtension.erase(libraryPath);
+                 }
              }
              finish();
          });
@@ -307,6 +321,13 @@ bool SubsonicProvider::hasRomanization(const QString& path) const
     const QString libraryPath = libraryPathFor(path);
     const std::scoped_lock lock{m_mutex};
     return m_romanization.contains(libraryPath);
+}
+
+bool SubsonicProvider::canUpload(const QString& path) const
+{
+    const QString libraryPath = libraryPathFor(path);
+    const std::scoped_lock lock{m_mutex};
+    return m_uploadExtension.contains(libraryPath) && m_uploadRole.contains(libraryPath);
 }
 
 void SubsonicProvider::call(const QString& path, const QString& method, const QUrlQuery& params,

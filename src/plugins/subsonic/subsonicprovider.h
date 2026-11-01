@@ -74,12 +74,16 @@ public:
     [[nodiscard]] std::optional<bool> serverScrobbles(const QString& libraryPath) const;
     //! True if the server owning @p path, a library or track path, has the `romanization` extension.
     [[nodiscard]] bool hasRomanization(const QString& path) const;
+    //! True if the server owning @p path has the `upload` extension and lets the user upload (`uploadRole`).
+    [[nodiscard]] bool canUpload(const QString& path) const;
 
     //! Calls @p method on the server owning @p path, a library, track or artwork path.
     void call(const QString& path, const QString& method, const QUrlQuery& params, ResponseCallback callback);
     //! Calls @p method on the server of @p account.
     void call(const Account& account, const QString& method, const QUrlQuery& params, ResponseCallback callback);
 
+    //! Returns the library path owning @p path, a library, track or artwork path, or an empty string.
+    [[nodiscard]] QString libraryPathFor(const QString& path) const;
     //! Returns the account of the server owning @p path, a library, track or artwork path.
     [[nodiscard]] std::optional<Account> accountForPath(const QString& path) const;
 
@@ -90,8 +94,6 @@ Q_SIGNALS:
     void serverInfoChanged(const QString& libraryPath);
 
 private:
-    //! Returns the library path owning @p path, a library, track or artwork path, or an empty string.
-    [[nodiscard]] QString libraryPathFor(const QString& path) const;
     void finishSync(const std::shared_ptr<SyncState>& state);
 
     void fetchSongs(const std::shared_ptr<SyncState>& state, int offset);
@@ -107,6 +109,10 @@ private:
     std::map<QString, bool> m_serverScrobbles;
     //! Library paths whose servers have the `romanization` extension.
     std::set<QString> m_romanization;
+    //! Library paths whose servers have the `upload` extension.
+    std::set<QString> m_uploadExtension;
+    //! Library paths whose users have getUser's `uploadRole`.
+    std::set<QString> m_uploadRole;
 };
 } // namespace Subsonic
 } // namespace Fooyin

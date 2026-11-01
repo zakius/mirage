@@ -207,10 +207,9 @@ QUrl apiUrl(const Account& account, const QString& method, QUrlQuery params)
     return url;
 }
 
-void request(QNetworkAccessManager* network, const Account& account, const QString& method, const QUrlQuery& params,
-             QObject* context, ResponseCallback callback)
+namespace {
+void handleReply(QNetworkReply* reply, QObject* context, ResponseCallback callback)
 {
-    auto* reply = network->get(makeNetworkRequest(apiUrl(account, method, params)));
     QObject::connect(reply, &QNetworkReply::finished, context, [reply, callback = std::move(callback)]() {
         reply->deleteLater();
 
@@ -231,6 +230,25 @@ void request(QNetworkAccessManager* network, const Account& account, const QStri
 
         callback(response, {});
     });
+}
+} // namespace
+
+QNetworkReply* request(QNetworkAccessManager* network, const Account& account, const QString& method,
+                       const QUrlQuery& params, QObject* context, ResponseCallback callback)
+{
+    auto* reply = network->get(makeNetworkRequest(apiUrl(account, method, params)));
+    handleReply(reply, context, std::move(callback));
+    return reply;
+}
+
+QNetworkReply* post(QNetworkAccessManager* network, const Account& account, const QString& method,
+                    const QUrlQuery& params, const QByteArray& body, QObject* context, ResponseCallback callback)
+{
+    QNetworkRequest networkRequest = makeNetworkRequest(apiUrl(account, method, params));
+    networkRequest.setHeader(QNetworkRequest::ContentTypeHeader, u"application/octet-stream"_s);
+    auto* reply = network->post(networkRequest, body);
+    handleReply(reply, context, std::move(callback));
+    return reply;
 }
 
 QString replyError(const QNetworkReply* reply)
@@ -371,6 +389,11 @@ std::optional<bool> serverScrobbles(const QJsonObject& getUserResponse)
 {
     const QJsonValue enabled = getUserResponse.value("user"_L1).toObject().value("scrobblingEnabled"_L1);
     return enabled.isBool() ? std::optional{enabled.toBool()} : std::nullopt;
+}
+
+bool uploadRole(const QJsonObject& getUserResponse)
+{
+    return getUserResponse.value("user"_L1).toObject().value("uploadRole"_L1).toBool();
 }
 
 bool scrobblesLocally(std::optional<bool> choice, std::optional<bool> serverScrobbles)
