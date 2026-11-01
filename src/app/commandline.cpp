@@ -191,7 +191,7 @@ CommandLine::ParseResult CommandLine::parse()
         {.name = nullptr, .has_arg = 0, .flag = nullptr, .val = 0},
     };
 
-    static const auto help = u"%1: fooyin [%2] [%3]\n"
+    static const auto help = u"%1: mirage [%2] [%3]\n"
                              "\n"
                              "%4:\n"
                              "  -h, --help                 %5\n"
@@ -261,7 +261,7 @@ CommandLine::ParseResult CommandLine::parse()
                 return ParseResult::ExitSuccess;
             }
             case 'v': {
-                m_message = u"%1 %2"_s.arg(u"fooyin"_s, QLatin1String(VERSION));
+                m_message = u"%1 %2"_s.arg(u"mirage"_s, QLatin1String(VERSION));
                 return ParseResult::ExitSuccess;
             }
             case 'x':
