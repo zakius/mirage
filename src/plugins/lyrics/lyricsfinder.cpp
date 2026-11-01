@@ -29,6 +29,7 @@
 #include "sources/lyricsource.h"
 #include "sources/neteaselyrics.h"
 #include "sources/qqlyrics.h"
+#include "sources/subsoniclyrics.h"
 #include "sources/taglyrics.h"
 
 #include <core/track.h>
@@ -43,16 +44,17 @@ constexpr auto SourceState = "Lyrics/SourceState";
 namespace {
 void sortSources(std::vector<Fooyin::Lyrics::LyricSource*>& sources)
 {
-    std::ranges::sort(sources, {}, &Fooyin::Lyrics::LyricSource::index);
+    std::ranges::stable_sort(sources, {}, &Fooyin::Lyrics::LyricSource::index);
     std::ranges::for_each(sources, [i = 0](auto& source) mutable { source->setIndex(i++); });
 }
 } // namespace
 
 namespace Fooyin::Lyrics {
 LyricsFinder::LyricsFinder(std::shared_ptr<NetworkAccessManager> networkManager, SettingsManager* settings,
-                           QObject* parent)
+                           std::shared_ptr<LibraryProviderRegistry> libraryProviders, QObject* parent)
     : QObject{parent}
     , m_networkManager{std::move(networkManager)}
+    , m_libraryProviders{std::move(libraryProviders)}
     , m_settings{settings}
     , m_foundAnyResults{false}
     , m_externalPhaseStarted{false}
@@ -133,6 +135,11 @@ std::shared_ptr<NetworkAccessManager> LyricsFinder::networkManager() const
     return m_networkManager;
 }
 
+std::shared_ptr<LibraryProviderRegistry> LyricsFinder::libraryProviders() const
+{
+    return m_libraryProviders;
+}
+
 std::vector<LyricSource*> LyricsFinder::sources() const
 {
     return m_sources;
@@ -196,13 +203,16 @@ void LyricsFinder::reset()
 
 void LyricsFinder::loadDefaults()
 {
+    // Server lyrics follow lyrics files and tags; a saved order without them puts them level with LRCLIB, and the
+    // stable sort keeps them first
     m_sources = {new LocalLyrics(m_networkManager.get(), m_settings, 0, true, this),
                  new TagLyrics(m_networkManager.get(), m_settings, 1, true, this),
-                 new LrcLibLyrics(m_networkManager.get(), m_settings, 2, true, this),
-                 new NeteaseLyrics(m_networkManager.get(), m_settings, 3, true, this),
-                 new QQLyrics(m_networkManager.get(), m_settings, 4, true, this),
-                 new KugouLyrics(m_networkManager.get(), m_settings, 5, true, this),
-                 new DarkLyrics(m_networkManager.get(), m_settings, 6, false, this)};
+                 new SubsonicLyrics(m_networkManager.get(), m_settings, m_libraryProviders, 2, true, this),
+                 new LrcLibLyrics(m_networkManager.get(), m_settings, 3, true, this),
+                 new NeteaseLyrics(m_networkManager.get(), m_settings, 4, true, this),
+                 new QQLyrics(m_networkManager.get(), m_settings, 5, true, this),
+                 new KugouLyrics(m_networkManager.get(), m_settings, 6, true, this),
+                 new DarkLyrics(m_networkManager.get(), m_settings, 7, false, this)};
 }
 
 void LyricsFinder::startLyricsSearch(const Track& track)

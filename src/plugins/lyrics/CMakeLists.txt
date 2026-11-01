@@ -61,6 +61,10 @@ create_fooyin_plugin_internal(
         sources/neteaselyrics.h
         sources/qqlyrics.cpp
         sources/qqlyrics.h
+        sources/structuredlyrics.cpp
+        sources/structuredlyrics.h
+        sources/subsoniclyrics.cpp
+        sources/subsoniclyrics.h
         sources/taglyrics.cpp
         sources/taglyrics.h
 )

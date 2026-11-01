@@ -45,6 +45,7 @@ bool hasSameTagLyrics(const Fooyin::Track& lhs, const Fooyin::Track& rhs, const 
 
 namespace Fooyin::Lyrics {
 LyricsPropertiesTab::LyricsPropertiesTab(const Track& track, std::shared_ptr<NetworkAccessManager> networkAccess,
+                                         std::shared_ptr<LibraryProviderRegistry> libraryProviders,
                                          LyricsSaver* lyricsSaver, PlayerController* playerController,
                                          SettingsManager* settings, TrackEditable canEditTrack, QWidget* parent)
     : PropertiesTabWidget{parent}
@@ -54,7 +55,7 @@ LyricsPropertiesTab::LyricsPropertiesTab(const Track& track, std::shared_ptr<Net
     , m_playerController{playerController}
     , m_settings{settings}
     , m_canEditTrack{std::move(canEditTrack)}
-    , m_lyricsFinder{new LyricsFinder(m_networkAccess, m_settings, this)}
+    , m_lyricsFinder{new LyricsFinder(m_networkAccess, m_settings, std::move(libraryProviders), this)}
     , m_editor{new LyricsEditor(playerController, this)}
     , m_hasPendingScopeChanges{false}
 {

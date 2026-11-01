@@ -170,6 +170,13 @@ Subsonic API documentation.
   becomes a non-library track built like a synced one, so it plays, scrobbles and can be added to playlists. oasis
   returns YouTube Music songs after the library's matches, and these appear in the search; a server that returns only
   library songs adds nothing.
+- **Lyrics.** The lyrics plugin has a "Subsonic" source for tracks of Subsonic libraries. It calls OpenSubsonic
+  `getLyricsBySongId` if `getOpenSubsonicExtensions` lists `songLyrics` (asked once per server), and `getLyrics` by
+  artist and title otherwise. `structuredLyrics` become LRC text: the first synced entry with its `offset`, or else plain
+  lines. The request is signed by the provider: `resolveUrl()` maps `<library path>/rest/<method>?<params>` to an
+  authenticated API URL. The server holds the track's own lyrics, so the source counts as local: it runs without
+  fooyin's automatic search, after lyrics files and embedded tags (which win), before lyrics services, and its lyrics
+  are not saved back.
 - **Ratings and stars.** On `tracksStatsChanged`: a rating change calls `setRating`, rounded to 1–5 stars, or 0 to
   clear. A love change calls `star` or `unstar`.
 - **Playlists.** After each sync, `getPlaylists` and `getPlaylist` for each one. Each server playlist becomes a fooyin

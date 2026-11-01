@@ -144,10 +144,15 @@ RemoteStreamSource SubsonicProvider::createStreamSource(const QUrl& url) const
 
 QUrl SubsonicProvider::resolveUrl(const QUrl& url) const
 {
-    const QString path = url.toString();
+    const QString path = url.toString(QUrl::RemoveQuery);
     const auto account = accountForPath(path);
     if(!account) {
         return {};
+    }
+
+    // `<library path>/rest/<method>?<params>` signs an API call, for example for the lyrics plugin
+    if(const auto index = path.lastIndexOf("/rest/"_L1); index >= 0) {
+        return apiUrl(*account, path.sliced(index + 6), QUrlQuery{url});
     }
 
     QUrlQuery params;

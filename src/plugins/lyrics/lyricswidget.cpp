@@ -642,8 +642,9 @@ void LyricsWidget::openSearchDialog()
         return;
     }
 
-    auto* dialog = new LyricsSearchDialog(m_currentTrack, m_lyricsService->finder()->networkManager(), m_lyricsSaver,
-                                          m_settings, Utils::getMainWindow());
+    auto* dialog = new LyricsSearchDialog(m_currentTrack, m_lyricsService->finder()->networkManager(),
+                                          m_lyricsService->finder()->libraryProviders(), m_lyricsSaver, m_settings,
+                                          Utils::getMainWindow());
     dialog->setAttribute(Qt::WA_DeleteOnClose);
     dialog->open();
 }

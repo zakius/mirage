@@ -49,11 +49,12 @@ constexpr auto SearchDialogSplitter    = "Lyrics/SearchDialogSplitter"_L1;
 
 namespace Fooyin::Lyrics {
 LyricsSearchDialog::LyricsSearchDialog(const Track& track, std::shared_ptr<NetworkAccessManager> networkAccess,
+                                       std::shared_ptr<LibraryProviderRegistry> libraryProviders,
                                        LyricsSaver* lyricsSaver, SettingsManager* settings, QWidget* parent)
     : QDialog{parent}
     , m_track{track}
     , m_lyricsSaver{lyricsSaver}
-    , m_finder{new LyricsFinder(std::move(networkAccess), settings, this)}
+    , m_finder{new LyricsFinder(std::move(networkAccess), settings, std::move(libraryProviders), this)}
     , m_titleEdit{new LineEditEditor(tr("Title"), this)}
     , m_albumEdit{new LineEditEditor(tr("Album"), this)}
     , m_artistEdit{new LineEditEditor(tr("Artist"), this)}

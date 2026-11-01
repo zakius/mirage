@@ -58,9 +58,10 @@ void LyricsPlugin::initialise(const CorePluginContext& context)
     m_audioLoader      = context.audioLoader;
     m_networkAccess    = context.networkAccess;
     m_settings         = context.settingsManager;
+    m_libraryProviders = context.libraryProviders;
 
     m_lyricsSettings = std::make_unique<LyricsSettings>();
-    m_lyricsFinder   = new LyricsFinder(context.networkAccess, m_settings, this);
+    m_lyricsFinder   = new LyricsFinder(context.networkAccess, m_settings, m_libraryProviders, this);
     m_lyricsSaver    = new LyricsSaver(context.library, m_settings, this);
 
     m_lyricsService = new LyricsPlaybackService(context, m_lyricsFinder, m_lyricsSaver, this);
@@ -90,7 +91,8 @@ void LyricsPlugin::initialise(const GuiPluginContext& context)
 
     context.propertiesDialog->addTab(tr("Lyrics"), [this](const TrackList& tracks) {
         return new LyricsPropertiesTab(
-            tracks.empty() ? Track{} : tracks.front(), m_networkAccess, m_lyricsSaver, m_playerController, m_settings,
+            tracks.empty() ? Track{} : tracks.front(), m_networkAccess, m_libraryProviders, m_lyricsSaver,
+            m_playerController, m_settings,
             [this](const Track& track) { return track.isMetadataEditable(m_audioLoader->canWriteMetadata(track)); });
     });
 
@@ -179,7 +181,7 @@ void LyricsPlugin::openSearchDialog(const Track& track) const
         return;
     }
 
-    auto* dialog = new LyricsSearchDialog(track, m_networkAccess, m_lyricsSaver, m_settings, Utils::getMainWindow());
+    auto* dialog = new LyricsSearchDialog(track, m_networkAccess, m_libraryProviders, m_lyricsSaver, m_settings, Utils::getMainWindow());
     dialog->setAttribute(Qt::WA_DeleteOnClose);
     dialog->open();
 }
@@ -190,7 +192,7 @@ void LyricsPlugin::quickSearchLyrics(const Track& track)
         return;
     }
 
-    auto* finder = new LyricsFinder(m_networkAccess, m_settings, this);
+    auto* finder = new LyricsFinder(m_networkAccess, m_settings, m_libraryProviders, this);
 
     QObject::connect(
         finder, &LyricsFinder::lyricsFound, this,
@@ -230,7 +232,7 @@ void LyricsPlugin::loadTrackLyricsAndOpenDialog(const Track& track)
         return;
     }
 
-    auto* finder = new LyricsFinder(m_networkAccess, m_settings, this);
+    auto* finder = new LyricsFinder(m_networkAccess, m_settings, m_libraryProviders, this);
 
     QObject::connect(
         finder, &LyricsFinder::lyricsFound, this,

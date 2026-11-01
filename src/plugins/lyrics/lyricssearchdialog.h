@@ -34,6 +34,7 @@ class QSplitter;
 class QTreeView;
 
 namespace Fooyin {
+class LibraryProviderRegistry;
 class LineEditEditor;
 class SettingsManager;
 
@@ -48,7 +49,8 @@ class LyricsSearchDialog : public QDialog
 
 public:
     LyricsSearchDialog(const Track& track, std::shared_ptr<NetworkAccessManager> networkAccess,
-                       LyricsSaver* lyricsSaver, SettingsManager* settings, QWidget* parent = nullptr);
+                       std::shared_ptr<LibraryProviderRegistry> libraryProviders, LyricsSaver* lyricsSaver,
+                       SettingsManager* settings, QWidget* parent = nullptr);
 
     void accept() override;
 

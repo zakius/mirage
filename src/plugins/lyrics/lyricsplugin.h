@@ -25,6 +25,7 @@
 
 namespace Fooyin {
 class FyWidget;
+class LibraryProviderRegistry;
 class Track;
 class TrackSelectionController;
 
@@ -61,6 +62,7 @@ private:
     const CorePluginContext* m_coreContext;
     std::shared_ptr<AudioLoader> m_audioLoader;
     std::shared_ptr<NetworkAccessManager> m_networkAccess;
+    std::shared_ptr<LibraryProviderRegistry> m_libraryProviders;
     TrackSelectionController* m_trackSelection;
     WidgetProvider* m_widgetProvider;
     SettingsManager* m_settings;

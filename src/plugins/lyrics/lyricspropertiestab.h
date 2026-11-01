@@ -25,6 +25,7 @@
 #include <gui/propertiesdialog.h>
 
 namespace Fooyin {
+class LibraryProviderRegistry;
 class PlayerController;
 
 namespace Lyrics {
@@ -40,7 +41,7 @@ public:
     using TrackEditable = std::function<bool(const Track&)>;
 
     LyricsPropertiesTab(const Track& track, std::shared_ptr<NetworkAccessManager> networkAccess,
-                        LyricsSaver* lyricsSaver, PlayerController* playerController, SettingsManager* settings,
+                        std::shared_ptr<LibraryProviderRegistry> libraryProviders, LyricsSaver* lyricsSaver, PlayerController* playerController, SettingsManager* settings,
                         TrackEditable canEditTrack = {}, QWidget* parent = nullptr);
 
     void setTrackScope(const TrackList& tracks) override;

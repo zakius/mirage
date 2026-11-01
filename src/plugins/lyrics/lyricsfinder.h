@@ -26,6 +26,7 @@
 #include <core/scripting/scriptparser.h>
 
 namespace Fooyin {
+class LibraryProviderRegistry;
 class Track;
 
 namespace Lyrics {
@@ -48,8 +49,8 @@ class LyricsFinder : public QObject
     Q_OBJECT
 
 public:
-    explicit LyricsFinder(std::shared_ptr<NetworkAccessManager> networkManager, SettingsManager* settings,
-                          QObject* parent = nullptr);
+    LyricsFinder(std::shared_ptr<NetworkAccessManager> networkManager, SettingsManager* settings,
+                 std::shared_ptr<LibraryProviderRegistry> libraryProviders, QObject* parent = nullptr);
 
     void cancel();
 
@@ -59,6 +60,7 @@ public:
     void findTagLyrics(const Track& track);
 
     [[nodiscard]] std::shared_ptr<NetworkAccessManager> networkManager() const;
+    [[nodiscard]] std::shared_ptr<LibraryProviderRegistry> libraryProviders() const;
     [[nodiscard]] std::vector<LyricSource*> sources() const;
 
     void saveState();
@@ -100,6 +102,7 @@ private:
     [[nodiscard]] bool foundLocalResults() const;
 
     std::shared_ptr<NetworkAccessManager> m_networkManager;
+    std::shared_ptr<LibraryProviderRegistry> m_libraryProviders;
     SettingsManager* m_settings;
 
     std::vector<LyricSource*> m_sources;
