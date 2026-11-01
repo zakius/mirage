@@ -22,10 +22,25 @@
 #include <QJsonArray>
 #include <QString>
 
+#include <cstdint>
+
 namespace Fooyin::Lyrics {
+//! Lyrics layers of OpenSubsonic `songLyrics` v2 to show.
+enum class LyricsLayers : uint8_t
+{
+    Main,
+    Pronunciation,
+    MainAndPronunciation,
+};
+
 /*!
- * Converts OpenSubsonic `structuredLyrics` to LRC text: the first synced entry as timed lines with its offset, or else
- * the first entry as plain lines. Returns an empty string if there are no lines.
+ * Converts OpenSubsonic `structuredLyrics` to LRC text: the first synced `main` entry as timed lines with its offset,
+ * or else the first `main` entry as plain lines. Returns an empty string if there are no lines.
+ *
+ * With @p layers asking for it, the `pronunciation` entry is shown instead, or after each main line, paired by line
+ * index. Its `cueLine` word timing becomes enhanced LRC word timestamps. Without a pronunciation entry, the main
+ * lyrics are shown.
  */
-[[nodiscard]] QString structuredLyricsToLrc(const QJsonArray& structuredLyrics);
+[[nodiscard]] QString structuredLyricsToLrc(const QJsonArray& structuredLyrics,
+                                            LyricsLayers layers = LyricsLayers::Main);
 } // namespace Fooyin::Lyrics

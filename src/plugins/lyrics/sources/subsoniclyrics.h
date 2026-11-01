@@ -33,6 +33,9 @@ namespace Lyrics {
  * Lyrics from the Subsonic server of a track: OpenSubsonic `getLyricsBySongId` if the server lists the `songLyrics`
  * extension, else `getLyrics` by artist and title. Requests are signed through the provider's resolveUrl().
  *
+ * With the `romanization` extension, the romanized (`pronunciation`) lyrics are asked for as the Subsonic page's
+ * "Show names and lyrics" option says.
+ *
  * The server holds a track's own lyrics, so they count as local: they are searched without automatic searching, rank
  * after lyrics files and tags, and are not saved back.
  */
@@ -51,11 +54,18 @@ public:
 
 private:
     void get(const QString& method, const QUrlQuery& params, const std::function<void(const QJsonObject&)>& handler);
-    void requestLyrics(bool bySongId);
+    void requestLyrics();
+
+    //! The OpenSubsonic extensions of a server that lyrics use.
+    struct Extensions
+    {
+        bool songLyrics{false};
+        bool romanization{false};
+    };
 
     std::shared_ptr<LibraryProviderRegistry> m_providers;
-    //! Whether each server, by library path, lists the songLyrics extension.
-    std::map<QString, bool> m_songLyrics;
+    //! The extensions of each server, by library path.
+    std::map<QString, Extensions> m_extensions;
 
     SearchParams m_params;
     QString m_server;

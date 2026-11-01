@@ -25,20 +25,78 @@
 #include <QStringList>
 
 #include <algorithm>
+#include <optional>
 
 using namespace Qt::StringLiterals;
 
-namespace Fooyin::Lyrics {
-QString structuredLyricsToLrc(const QJsonArray& structuredLyrics)
+namespace {
+//! Returns the first synced entry of @p kind, or else its first entry; entries without a kind are `main`.
+QJsonObject entryOfKind(const QJsonArray& structuredLyrics, QLatin1String kind)
 {
-    if(structuredLyrics.isEmpty()) {
-        return {};
+    QJsonObject first;
+    for(const auto& value : structuredLyrics) {
+        const QJsonObject entry = value.toObject();
+        if(entry.value("kind"_L1).toString(u"main"_s) != kind) {
+            continue;
+        }
+        if(entry.value("synced"_L1).toBool()) {
+            return entry;
+        }
+        if(first.isEmpty()) {
+            first = entry;
+        }
+    }
+    return first;
+}
+
+//! Returns line @p index of @p entry as LRC, timed at @p start if synced, with the words of its first cueLine.
+QString lrcLine(const QJsonObject& entry, qsizetype index, std::optional<uint64_t> start)
+{
+    const QString value = entry.value("line"_L1).toArray().at(index).toObject().value("value"_L1).toString();
+    if(!start) {
+        return value;
     }
 
-    const auto synced = std::ranges::find_if(
-        structuredLyrics, [](const QJsonValue& entry) { return entry.toObject().value("synced"_L1).toBool(); });
-    const QJsonObject entry     = (synced != structuredLyrics.end() ? *synced : structuredLyrics.first()).toObject();
-    const bool isSynced         = entry.value("synced"_L1).toBool();
+    const auto timestamp = [](const QJsonValue& time) {
+        return Fooyin::Lyrics::formatTimestamp(static_cast<uint64_t>(std::max<qint64>(time.toInteger(), 0)));
+    };
+
+    QString words;
+    const QJsonArray cueLines = entry.value("cueLine"_L1).toArray();
+    // Several cueLines may share an index, one per singer; the first is the main singer's
+    const auto cueLine = std::ranges::find_if(
+        cueLines, [index](const QJsonValue& line) { return line.toObject().value("index"_L1).toInteger() == index; });
+    if(cueLine != cueLines.end()) {
+        for(const auto& cue : cueLine->toObject().value("cue"_L1).toArray()) {
+            const QJsonObject object = cue.toObject();
+            words += u"<%1>%2"_s.arg(timestamp(object.value("start"_L1)), object.value("value"_L1).toString());
+        }
+    }
+
+    return u"[%1]%2"_s.arg(Fooyin::Lyrics::formatTimestamp(*start), words.isEmpty() ? value : words);
+}
+
+std::optional<uint64_t> lineStart(const QJsonObject& entry, qsizetype index)
+{
+    if(!entry.value("synced"_L1).toBool()) {
+        return {};
+    }
+    const qint64 start = entry.value("line"_L1).toArray().at(index).toObject().value("start"_L1).toInteger();
+    return static_cast<uint64_t>(std::max<qint64>(start, 0));
+}
+} // namespace
+
+namespace Fooyin::Lyrics {
+QString structuredLyricsToLrc(const QJsonArray& structuredLyrics, LyricsLayers layers)
+{
+    const QJsonObject main          = entryOfKind(structuredLyrics, "main"_L1);
+    const QJsonObject pronunciation = entryOfKind(structuredLyrics, "pronunciation"_L1);
+    // Without a pronunciation entry, as for a Latin-script song, the main lyrics are shown
+    const QJsonObject entry
+        = main.isEmpty() || (layers == LyricsLayers::Pronunciation && !pronunciation.isEmpty()) ? pronunciation : main;
+    const QJsonObject paired
+        = layers == LyricsLayers::MainAndPronunciation && !main.isEmpty() ? pronunciation : QJsonObject{};
+
     const QJsonArray entryLines = entry.value("line"_L1).toArray();
     if(entryLines.isEmpty()) {
         return {};
@@ -46,18 +104,16 @@ QString structuredLyricsToLrc(const QJsonArray& structuredLyrics)
 
     QStringList lines;
     // Both formats use a positive offset to show lyrics sooner
-    if(const qint64 offset = entry.value("offset"_L1).toInteger(); isSynced && offset != 0) {
+    if(const qint64 offset = entry.value("offset"_L1).toInteger(); entry.value("synced"_L1).toBool() && offset != 0) {
         lines.append(u"[offset:%1]"_s.arg(offset));
     }
-    for(const auto& line : entryLines) {
-        const QJsonObject object = line.toObject();
-        const QString value      = object.value("value"_L1).toString();
-        if(isSynced) {
-            const auto start = static_cast<uint64_t>(std::max<qint64>(object.value("start"_L1).toInteger(), 0));
-            lines.append(u"[%1]%2"_s.arg(formatTimestamp(start), value));
-        }
-        else {
-            lines.append(value);
+    // Pronunciation lines match the main lines one to one, so each follows its main line at the same time
+    const qsizetype pairedCount = paired.value("line"_L1).toArray().size();
+    for(qsizetype i{0}; i < entryLines.size(); ++i) {
+        const auto start = lineStart(entry, i);
+        lines.append(lrcLine(entry, i, start));
+        if(i < pairedCount) {
+            lines.append(lrcLine(paired, i, start));
         }
     }
 

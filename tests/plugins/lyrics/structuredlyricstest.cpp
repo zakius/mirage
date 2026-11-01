@@ -67,4 +67,68 @@ TEST(StructuredLyricsTest, ReturnsNothingWithoutLines)
     EXPECT_TRUE(Lyrics::structuredLyricsToLrc({}).isEmpty());
     EXPECT_TRUE(Lyrics::structuredLyricsToLrc(structuredLyrics(R"([{"synced": true, "line": []}])")).isEmpty());
 }
+namespace {
+// What a server that ignores `kinds` sends: every layer, with word timing
+constexpr auto AllLayers = R"([
+    {"kind": "main", "lang": "jpn", "synced": true,
+     "line": [{"start": 1000, "value": "夢ならば"}, {"start": 3000, "value": "どれほど"}],
+     "cueLine": [{"index": 0, "start": 1000, "end": 3000, "value": "夢ならば",
+                  "cue": [{"start": 1000, "value": "夢", "byteStart": 0, "byteEnd": 2},
+                          {"start": 1500, "value": "ならば", "byteStart": 3, "byteEnd": 11}]}]},
+    {"kind": "translation", "lang": "eng", "synced": true,
+     "line": [{"start": 1000, "value": "If only"}, {"start": 3000, "value": "How much"}]},
+    {"kind": "pronunciation", "lang": "ja-Latn", "synced": true,
+     "line": [{"start": 1000, "value": "yume naraba"}, {"start": 3000, "value": "dore hodo"}],
+     "cueLine": [{"index": 0, "start": 1000, "end": 3000, "value": "yume naraba",
+                  "cue": [{"start": 1000, "value": "yume ", "byteStart": 0, "byteEnd": 4},
+                          {"start": 1500, "value": "naraba", "byteStart": 5, "byteEnd": 10}]},
+                 {"index": 1, "start": 3000, "value": "dore hodo",
+                  "cue": [{"start": 3000, "value": "dore ", "byteStart": 0, "byteEnd": 4},
+                          {"start": 3400, "value": "hodo", "byteStart": 5, "byteEnd": 8}]}]}
+])";
+} // namespace
+
+TEST(StructuredLyricsTest, ShowsMainLyricsOfEnhancedResponses)
+{
+    EXPECT_EQ(Lyrics::structuredLyricsToLrc(structuredLyrics(AllLayers)),
+              u"[00:01.00]<00:01.00>夢<00:01.50>ならば\n[00:03.00]どれほど"_s);
+}
+
+TEST(StructuredLyricsTest, ShowsPronunciationWithWordTiming)
+{
+    const QString text
+        = Lyrics::structuredLyricsToLrc(structuredLyrics(AllLayers), Lyrics::LyricsLayers::Pronunciation);
+    EXPECT_EQ(text, u"[00:01.00]<00:01.00>yume <00:01.50>naraba\n[00:03.00]<00:03.00>dore <00:03.40>hodo"_s);
+
+    const auto lyrics = Lyrics::parse(text);
+    ASSERT_EQ(lyrics.type, Lyrics::Lyrics::Type::SyncedWords);
+    ASSERT_EQ(lyrics.lines.size(), 2);
+    ASSERT_EQ(lyrics.lines.at(1).words.size(), 2);
+    EXPECT_EQ(lyrics.lines.at(1).words.at(1).timestamp, 3400);
+}
+
+TEST(StructuredLyricsTest, PairsEachMainLineWithItsPronunciation)
+{
+    const QString text
+        = Lyrics::structuredLyricsToLrc(structuredLyrics(AllLayers), Lyrics::LyricsLayers::MainAndPronunciation);
+    EXPECT_EQ(text, u"[00:01.00]<00:01.00>夢<00:01.50>ならば\n[00:01.00]<00:01.00>yume <00:01.50>naraba\n"
+                    "[00:03.00]どれほど\n[00:03.00]<00:03.00>dore <00:03.40>hodo"_s);
+
+    const auto lyrics = Lyrics::parse(text);
+    ASSERT_EQ(lyrics.lines.size(), 4);
+    EXPECT_EQ(lyrics.lines.at(2).joinedWords().trimmed(), u"どれほど"_s);
+    EXPECT_EQ(lyrics.lines.at(3).timestamp, 3000);
+}
+
+TEST(StructuredLyricsTest, ShowsMainLyricsWithoutPronunciation)
+{
+    // A Latin-script song: the server answers `kinds=pronunciation` with the main entry
+    const auto latinSong = structuredLyrics(R"([
+        {"kind": "main", "lang": "eng", "synced": true, "line": [{"start": 1000, "value": "Hello"}]}
+    ])");
+
+    EXPECT_EQ(Lyrics::structuredLyricsToLrc(latinSong, Lyrics::LyricsLayers::Pronunciation), u"[00:01.00]Hello"_s);
+    EXPECT_EQ(Lyrics::structuredLyricsToLrc(latinSong, Lyrics::LyricsLayers::MainAndPronunciation),
+              u"[00:01.00]Hello"_s);
+}
 } // namespace Fooyin::Testing

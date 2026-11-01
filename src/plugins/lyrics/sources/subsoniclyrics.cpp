@@ -24,6 +24,7 @@
 #include <core/library/libraryprovider.h>
 #include <core/network/networkaccessmanager.h>
 #include <core/network/networkutils.h>
+#include <utils/settings/settingsmanager.h>
 
 #include <QJsonArray>
 #include <QJsonObject>
@@ -35,6 +36,8 @@
 using namespace Qt::StringLiterals;
 
 constexpr auto SongMarker = "/song/";
+//! The Subsonic plugin's name display setting: 0 original, 1 romanized, 2 both.
+constexpr auto NameDisplaySetting = "Subsonic/NameDisplay";
 
 namespace {
 //! Servers may send a single object in place of a one-element array.
@@ -78,20 +81,23 @@ void SubsonicLyrics::search(const SearchParams& params)
     m_server = path.left(index);
     m_songId = QUrl::fromPercentEncoding(path.sliced(index + QLatin1String{SongMarker}.size()).toUtf8());
 
-    if(const auto it = m_songLyrics.find(m_server); it != m_songLyrics.cend()) {
-        requestLyrics(it->second);
+    if(m_extensions.contains(m_server)) {
+        requestLyrics();
         return;
     }
 
     get(u"getOpenSubsonicExtensions"_s, {}, [this](const QJsonObject& response) {
-        const bool songLyrics = std::ranges::any_of(
-            toArray(response.value("openSubsonicExtensions"_L1)),
-            [](const QJsonValue& extension) { return extension.toObject().value("name"_L1) == "songLyrics"_L1; });
+        const QJsonArray extensions = toArray(response.value("openSubsonicExtensions"_L1));
+        const auto has              = [&extensions](QLatin1String name) {
+            return std::ranges::any_of(extensions, [name](const QJsonValue& extension) {
+                return extension.toObject().value("name"_L1) == name;
+            });
+        };
         // Servers without OpenSubsonic answer with an error; a failed request is asked again next time
         if(!response.isEmpty()) {
-            m_songLyrics[m_server] = songLyrics;
+            m_extensions[m_server] = {.songLyrics = has("songLyrics"_L1), .romanization = has("romanization"_L1)};
         }
-        requestLyrics(songLyrics);
+        requestLyrics();
     });
 }
 
@@ -123,16 +129,33 @@ void SubsonicLyrics::get(const QString& method, const QUrlQuery& params,
     });
 }
 
-void SubsonicLyrics::requestLyrics(bool bySongId)
+void SubsonicLyrics::requestLyrics()
 {
+    const Extensions extensions = m_extensions.contains(m_server) ? m_extensions.at(m_server) : Extensions{};
+
     QUrlQuery params;
-    if(bySongId) {
+    if(extensions.songLyrics) {
         params.addQueryItem(u"id"_s, m_songId);
-        get(u"getLyricsBySongId"_s, params, [this](const QJsonObject& response) {
+
+        auto layers = LyricsLayers::Main;
+        if(extensions.romanization) {
+            const int display = settings()->value(NameDisplaySetting).toInt();
+            layers = display == 1 ? LyricsLayers::Pronunciation
+                   : display == 2 ? LyricsLayers::MainAndPronunciation
+                                  : LyricsLayers::Main;
+        }
+        // Servers that ignore `kinds` send every layer; the conversion picks the ones asked for
+        if(layers != LyricsLayers::Main) {
+            params.addQueryItem(u"enhanced"_s, u"true"_s);
+            params.addQueryItem(u"kinds"_s,
+                                layers == LyricsLayers::Pronunciation ? u"pronunciation"_s : u"main,pronunciation"_s);
+        }
+
+        get(u"getLyricsBySongId"_s, params, [this, layers](const QJsonObject& response) {
             LyricData data;
             // Lyrics found by song id need no title or artist match
             data.data = structuredLyricsToLrc(
-                toArray(response.value("lyricsList"_L1).toObject().value("structuredLyrics"_L1)));
+                toArray(response.value("lyricsList"_L1).toObject().value("structuredLyrics"_L1)), layers);
             Q_EMIT searchResult(data.data.isEmpty() ? std::vector<LyricData>{} : std::vector<LyricData>{data});
         });
         return;
