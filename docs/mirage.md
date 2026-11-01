@@ -165,12 +165,18 @@ Subsonic API documentation.
   A playlist with edits the server has not saved is marked with a `SubsonicUnsaved` extra property, so the mark
   survives a restart. A sync does not overwrite it, and the push is retried after the next sync. Removals that fail are
   retried on the next sync in the same session. When a sync applies the server's entries, entries the server cannot
-  hold (local files, tracks from other servers) keep their place. The last write wins. Removing a mirrored playlist
-  asks for confirmation (unless turned off), and the dialog says that the server copy is deleted too.
+  hold (local files, tracks from other servers) keep their place. Songs that are not in the library (for example
+  oasis's radio tracks) are kept as they are, so a push sends them back. Changes that only refresh the metadata of
+  entries, as after a sync, are not edits. The last write wins. Removing a mirrored playlist asks for confirmation
+  (unless turned off), and the dialog says that the server copy is deleted too.
+- **Read-only playlists.** A playlist the server marks `readonly` (OpenSubsonic), or one owned by another user, gets a
+  `SubsonicReadOnly` extra property and is locked in fooyin. Edits to it are not sent, and removing it only removes the
+  fooyin copy, which comes back on the next sync. If the server refuses a push for good (error 50 or 70), the edits
+  are dropped and the server's copy is applied again.
 - **New playlists.** Every new normal playlist is created on the default server (the Subsonic library with the lowest
   id) with `createPlaylist` and linked through the returned id; for servers older than API 1.14, which return nothing,
   it is found by name. After each sync, playlists that are still unlinked (made before a server was added, or whose
-  upload failed) are uploaded. Temporary playlists and autoplaylists stay local, because Subsonic cannot store
+  upload failed) are uploaded. fooyin's empty "Default" playlist is uploaded only once it gets tracks. Temporary playlists and autoplaylists stay local, because Subsonic cannot store
   autoplaylist queries.
 - **Accounts.** The settings page lists the servers. Selecting one edits its name, URL, user name or password; an empty
   password keeps the stored one. The library path stays the same, so tracks, statistics and playlists are kept when
@@ -271,3 +277,5 @@ Limits:
   sent.
 - A playlist removal that fails is forgotten on restart, and the playlist comes back on the next sync.
 - Playlist conflicts resolve by last write.
+- Playlists are read again only after a library sync (at start, or "Scan for changes"), so a playlist the server
+  grows (oasis radio) lags until then.

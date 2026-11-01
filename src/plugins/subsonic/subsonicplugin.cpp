@@ -43,12 +43,31 @@ using namespace std::chrono_literals;
 constexpr auto PlaylistProperty = "SubsonicPlaylist";
 //! Set while a mirrored playlist has edits the server has not saved, so they survive a restart.
 constexpr auto UnsavedProperty = "SubsonicUnsaved";
-constexpr int NotFoundCode     = 70;
+//! Set on mirrored playlists the server does not let this user change, such as another user's.
+constexpr auto ReadOnlyProperty = "SubsonicReadOnly";
+constexpr int NotAuthorizedCode = 50;
+constexpr int NotFoundCode      = 70;
 
 namespace {
 QString playlistKey(const Fooyin::Playlist* playlist)
 {
     return playlist->extraProperties().value(QString::fromLatin1(PlaylistProperty));
+}
+
+bool isReadOnly(const Fooyin::Playlist* playlist)
+{
+    return playlist->hasExtraProperty(QString::fromLatin1(ReadOnlyProperty));
+}
+
+//! True if the server refuses a change for good, so retrying cannot help.
+bool isRefused(const Fooyin::Subsonic::ApiError& error)
+{
+    return error.code == NotAuthorizedCode || error.code == NotFoundCode;
+}
+
+QString serverOf(const QString& playlistKey)
+{
+    return playlistKey.left(playlistKey.lastIndexOf(u"/playlist/"_s));
 }
 
 void logError(const QString& method, const std::optional<QJsonObject>& response,
@@ -109,7 +128,13 @@ void SubsonicPlugin::initialise(const CorePluginContext& context)
     };
     QObject::connect(m_playlistHandler, &PlaylistHandler::tracksAdded, this, markEdited);
     QObject::connect(m_playlistHandler, &PlaylistHandler::tracksPatched, this, markEdited);
-    QObject::connect(m_playlistHandler, &PlaylistHandler::tracksChanged, this, markEdited);
+    // Changes with indexes only refresh the metadata of entries, for example after a sync
+    QObject::connect(m_playlistHandler, &PlaylistHandler::tracksChanged, this,
+                     [this](Playlist* playlist, const std::vector<int>& indexes) {
+                         if(indexes.empty()) {
+                             playlistEdited(playlist);
+                         }
+                     });
     QObject::connect(m_playlistHandler, &PlaylistHandler::tracksRemoved, this, markEdited);
     QObject::connect(m_playlistHandler, &PlaylistHandler::playlistRenamed, this, markEdited);
     QObject::connect(m_playlistHandler, &PlaylistHandler::playlistRemoved, this, &SubsonicPlugin::playlistRemoved);
@@ -195,10 +220,15 @@ void SubsonicPlugin::writeStats(const TrackList& tracks, Track::Stats stats)
 
 void SubsonicPlugin::playlistEdited(Playlist* playlist)
 {
-    if(m_applyingServerChanges || !playlist) {
+    if(m_applyingServerChanges || !playlist || isReadOnly(playlist)) {
         return;
     }
-    if(const QString key = playlistKey(playlist); m_provider->isProviderPath(key)) {
+    const QString key = playlistKey(playlist);
+    if(key.isEmpty()) {
+        // For example fooyin's empty "Default" playlist, once it gets tracks
+        uploadPlaylist(playlist);
+    }
+    else if(m_provider->isProviderPath(key)) {
         ++m_dirtyPlaylists[key];
         playlist->setExtraProperty(QString::fromLatin1(UnsavedProperty), u"1"_s);
         m_pushTimer.start();
@@ -212,7 +242,8 @@ void SubsonicPlugin::playlistRemoved(const Playlist* playlist)
     }
 
     const QString key = playlistKey(playlist);
-    if(!m_provider->isProviderPath(key)) {
+    // The server keeps read-only playlists, so they come back on the next sync
+    if(!m_provider->isProviderPath(key) || isReadOnly(playlist)) {
         return;
     }
     m_dirtyPlaylists.erase(key);
@@ -227,7 +258,7 @@ void SubsonicPlugin::deletePlaylist(const QString& key)
     m_provider->call(key, u"deletePlaylist"_s, params,
                      [this, key](std::optional<QJsonObject> response, ApiError error) {
                          // Failed deletes are retried on the next sync
-                         if(response || error.code == NotFoundCode) {
+                         if(response || isRefused(error)) {
                              m_pendingDeletes.erase(key);
                          }
                          logError(u"deletePlaylist"_s, response, error);
@@ -248,6 +279,10 @@ void SubsonicPlugin::uploadPlaylist(Playlist* playlist)
 {
     if(m_applyingServerChanges || !playlist || playlist->isTemporary() || playlist->isAutoPlaylist()
        || !playlistKey(playlist).isEmpty() || m_uploadingPlaylists.contains(playlist->id())) {
+        return;
+    }
+    // fooyin creates an empty "Default" playlist whenever there is none; it is uploaded once it gets tracks
+    if(playlist->name() == "Default"_L1 && playlist->trackCount() == 0) {
         return;
     }
 
@@ -334,7 +369,7 @@ void SubsonicPlugin::pushPlaylists()
         }
 
         const QString serverId    = key.sliced(key.lastIndexOf('/'_L1) + 1);
-        const QString songsPrefix = key.left(key.lastIndexOf(u"/playlist/"_s)) + u"/song/"_s;
+        const QString songsPrefix = serverOf(key) + u"/song/"_s;
 
         // createPlaylist with a playlist id replaces its entries; tracks from elsewhere cannot be added
         QUrlQuery entries;
@@ -353,12 +388,17 @@ void SubsonicPlugin::pushPlaylists()
                                                const ApiError& error) {
             m_pushingPlaylists.erase(key);
             logError(method, response, error);
-            if(response && m_dirtyPlaylists.contains(key) && m_dirtyPlaylists.at(key) == edits) {
+            // The server will never take these edits, so its copy replaces them
+            const bool refused = !response && isRefused(error);
+            if(refused || (response && m_dirtyPlaylists.contains(key) && m_dirtyPlaylists.at(key) == edits)) {
                 m_dirtyPlaylists.erase(key);
                 for(Playlist* playlist : m_playlistHandler->playlists()) {
                     if(playlistKey(playlist) == key) {
                         playlist->removeExtraProperty(QString::fromLatin1(UnsavedProperty));
                     }
+                }
+                if(refused) {
+                    syncPlaylists(serverOf(key));
                 }
             }
             else if(response && m_dirtyPlaylists.contains(key)) {
@@ -414,17 +454,28 @@ void SubsonicPlugin::syncPlaylists(const QString& libraryPath)
 
                                      const QJsonObject playlist = playlistResponse->value("playlist"_L1).toObject();
                                      const QString name         = playlist.value("name"_L1).toString();
+                                     // OpenSubsonic marks read-only playlists; Subsonic only lets owners edit
+                                     const auto account  = m_provider->accountForPath(libraryPath);
+                                     const QString owner = playlist.value("owner"_L1).toString();
+                                     const bool readOnly = playlist.value("readonly"_L1).toBool()
+                                                        || (account && !owner.isEmpty() && owner != account->username);
 
                                      std::unordered_map<QString, Track> tracksByPath;
                                      for(const Track& track : m_library->libraryTracks()) {
                                          tracksByPath.emplace(track.filepath(), track);
                                      }
 
+                                     // Songs outside the library, such as radio tracks, are kept as they are
                                      TrackList tracks;
                                      for(const auto& entry : toArray(playlist.value("entry"_L1))) {
-                                         const QString path = songToTrack(entry.toObject(), libraryPath).filepath();
-                                         if(const auto it = tracksByPath.find(path); it != tracksByPath.cend()) {
+                                         Track track = songToTrack(entry.toObject(), libraryPath);
+                                         if(const auto it = tracksByPath.find(track.filepath());
+                                            it != tracksByPath.cend()) {
                                              tracks.push_back(it->second);
+                                         }
+                                         else {
+                                             track.generateHash();
+                                             tracks.push_back(track);
                                          }
                                      }
 
@@ -441,12 +492,29 @@ void SubsonicPlugin::syncPlaylists(const QString& libraryPath)
 
                                      const QScopedValueRollback applying{m_applyingServerChanges, true};
 
+                                     const auto setReadOnly = [this, readOnly](Playlist* target) {
+                                         if(readOnly) {
+                                             target->setExtraProperty(QString::fromLatin1(ReadOnlyProperty), u"1"_s);
+                                         }
+                                         else {
+                                             target->removeExtraProperty(QString::fromLatin1(ReadOnlyProperty));
+                                         }
+                                     };
+
                                      if(existing == playlists.cend()) {
                                          if(auto* created = m_playlistHandler->createNewPlaylist(name, tracks)) {
                                              created->setExtraProperty(QString::fromLatin1(PlaylistProperty), key);
+                                             setReadOnly(created);
+                                             m_playlistHandler->setPlaylistLocked(created->id(), readOnly);
                                          }
                                          return;
                                      }
+
+                                     // fooyin refuses changes to locked playlists, so the lock is lifted to apply them
+                                     const bool locked
+                                         = readOnly || ((*existing)->isLocked() && !isReadOnly(*existing));
+                                     setReadOnly(*existing);
+                                     m_playlistHandler->setPlaylistLocked((*existing)->id(), false);
 
                                      if((*existing)->name() != name) {
                                          m_playlistHandler->renamePlaylist((*existing)->id(), name);
@@ -468,6 +536,7 @@ void SubsonicPlugin::syncPlaylists(const QString& libraryPath)
                                      if((*existing)->tracks() != merged) {
                                          m_playlistHandler->replacePlaylistTracks((*existing)->id(), merged);
                                      }
+                                     m_playlistHandler->setPlaylistLocked((*existing)->id(), locked);
                                  });
             }
 
