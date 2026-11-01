@@ -162,7 +162,11 @@ Subsonic API documentation.
   playlist, matched by a `SubsonicPlaylist` extra property, and is created, renamed, replaced or removed to match.
   Edits in fooyin go back to the server one second after the last change: track changes through `createPlaylist` with
   `playlistId` (which replaces the entries), renames through `updatePlaylist`, and removal through `deletePlaylist`.
-  A playlist with unsent edits is not overwritten by a sync. The last write wins.
+  A playlist with edits the server has not saved is marked with a `SubsonicUnsaved` extra property, so the mark
+  survives a restart. A sync does not overwrite it, and the push is retried after the next sync. Removals that fail are
+  retried on the next sync in the same session. When a sync applies the server's entries, entries the server cannot
+  hold (local files, tracks from other servers) keep their place. The last write wins. Removing a mirrored playlist
+  asks for confirmation (unless turned off), and the dialog says that the server copy is deleted too.
 - **New playlists.** Every new normal playlist is created on the default server (the Subsonic library with the lowest
   id) with `createPlaylist` and linked through the returned id; for servers older than API 1.14, which return nothing,
   it is found by name. After each sync, playlists that are still unlinked (made before a server was added, or whose
@@ -182,7 +186,9 @@ Subsonic API documentation.
 - `library-providers`, on `master`: only the generic API commits, each tagged `[core]`, `[gui]` or `[scrobbler]` as
   in upstream, kept as a small series that rebases onto upstream `master` (see "Keeping the fork rebased").
 - `mirage`, on `library-providers`: this document, the Subsonic plugin (`[subsonic]` commits) and two small
-  `[mirage]` commits: the application name and profile, and Subsonic-only libraries (`LibraryManager` refuses folder
+  `[mirage]` commits: the application name and profile, install names (binary `mirage`, `lib/mirage`,
+  `share/mirage`, desktop file, metainfo and icons as `io.github.zakius.mirage`, so it installs next to fooyin), and
+  Subsonic-only libraries (`LibraryManager` refuses folder
   paths; the library settings page hides folder settings and sends "Add" to the Subsonic page). Rebase it when the API
   branch changes.
 
@@ -225,7 +231,7 @@ git rebase library-providers mirage
 cmake --build --preset debug && ctest --preset debug
 ```
 
-## Status (2026-10-30)
+## Status (2026-11-01)
 
 Steps 1 to 3 are done. Verified against oasis with a generated 30-track library, in an isolated fooyin profile that
 plays to a PulseAudio null sink. Fault cases used a proxy in front of oasis.
@@ -251,6 +257,11 @@ plays to a PulseAudio null sink. Fault cases used a proxy in front of oasis.
 - Folder libraries cannot be added; "Add" on the library page opens the Subsonic page.
 - A playlist that existed before the server was added, a new empty playlist, a playlist created from a library
   selection, and tracks added later all reach the server. A restart does not upload them again.
+- A local file opened into a server playlist stays there after the server adds songs to that playlist; the new songs
+  are merged around it.
+- With the server down: a removed entry and a removed playlist reach the server after "Scan for changes" once it is
+  back. An entry removed while the server is down, followed by a restart, reaches the server on the next start.
+- `cmake --install` puts nothing under a `fooyin` path.
 
 Limits:
 
@@ -258,4 +269,5 @@ Limits:
 - Autoplaylists stay local (not tested end to end).
 - Tracks that are not on the playlist's server (local files, other servers) stay in the fooyin playlist but are not
   sent.
+- A playlist removal that fails is forgotten on restart, and the playlist comes back on the next sync.
 - Playlist conflicts resolve by last write.
