@@ -27,6 +27,7 @@
 #include <QLoggingCategory>
 
 #include <deque>
+#include <ranges>
 
 Q_LOGGING_CATEGORY(SUBSONIC, "fy.subsonic")
 
@@ -42,6 +43,8 @@ constexpr int MissingParameterCode = 10;
 constexpr auto UrlField      = "Url";
 constexpr auto UsernameField = "Username";
 constexpr auto PasswordField = "Password";
+//! "1" or "0" where the user chose whether mirage's scrobbler also scrobbles; absent or empty follows the server.
+constexpr auto ScrobbleField = "Scrobble";
 
 namespace {
 QString accountKey(const QString& libraryPath)
@@ -51,7 +54,8 @@ QString accountKey(const QString& libraryPath)
 
 std::vector<QString> accountFields()
 {
-    return {QString::fromLatin1(UrlField), QString::fromLatin1(UsernameField), QString::fromLatin1(PasswordField)};
+    return {QString::fromLatin1(UrlField), QString::fromLatin1(UsernameField), QString::fromLatin1(PasswordField),
+            QString::fromLatin1(ScrobbleField)};
 }
 } // namespace
 
@@ -90,7 +94,9 @@ void SubsonicProvider::fetchTracks(const LibraryInfo& library, FetchCallback cal
     state->libraryPath = library.path;
     state->account     = *account;
     state->callback    = std::move(callback);
-    fetchSongs(state, 0);
+    fetchServerInfo(library.path, *account, [this, state]() {
+        fetchSongs(state, 0);
+    });
 }
 
 void SubsonicProvider::searchTracks(const LibraryInfo& library, const QString& query, FetchCallback callback)
@@ -160,9 +166,11 @@ QUrl SubsonicProvider::resolveUrl(const QUrl& url) const
     return apiUrl(*account, u"getCoverArt"_s, params);
 }
 
-bool SubsonicProvider::reportsPlays() const
+bool SubsonicProvider::reportsPlays(const Track& track) const
 {
-    return true;
+    const QString libraryPath = libraryPathFor(track.filepath());
+    const auto account        = accountForPath(libraryPath);
+    return account && !scrobblesLocally(account->scrobble, serverScrobbles(libraryPath));
 }
 
 QString SubsonicProvider::libraryPath(const Account& account)
@@ -189,19 +197,30 @@ void SubsonicProvider::loadAccount(const QString& libraryPath)
         return;
     }
 
-    const Account account{.url      = QUrl{values->at(QString::fromLatin1(UrlField))},
-                          .username = values->at(QString::fromLatin1(UsernameField)),
-                          .password = values->at(QString::fromLatin1(PasswordField))};
+    const auto value = [&values](const char* field) {
+        const auto it = values->find(QString::fromLatin1(field));
+        return it != values->cend() ? it->second : QString{};
+    };
+    const QString scrobble = value(ScrobbleField);
+    const Account account{.url      = QUrl{value(UrlField)},
+                          .username = value(UsernameField),
+                          .password = value(PasswordField),
+                          .scrobble = scrobble.isEmpty() ? std::nullopt : std::optional{scrobble == "1"_L1}};
 
-    const std::scoped_lock lock{m_mutex};
-    m_accounts[libraryPath] = account;
+    {
+        const std::scoped_lock lock{m_mutex};
+        m_accounts[libraryPath] = account;
+    }
+    fetchServerInfo(libraryPath, account);
 }
 
 bool SubsonicProvider::saveAccount(const QString& libraryPath, const Account& account)
 {
     const AccountStore::Values values{{QString::fromLatin1(UrlField), account.url.toString()},
                                       {QString::fromLatin1(UsernameField), account.username},
-                                      {QString::fromLatin1(PasswordField), account.password}};
+                                      {QString::fromLatin1(PasswordField), account.password},
+                                      {QString::fromLatin1(ScrobbleField),
+                                       account.scrobble ? (*account.scrobble ? u"1"_s : u"0"_s) : QString{}}};
     if(!m_accountStore.save(accountKey(libraryPath), values)) {
         return false;
     }
@@ -217,6 +236,39 @@ void SubsonicProvider::removeAccount(const QString& libraryPath)
 
     const std::scoped_lock lock{m_mutex};
     m_accounts.erase(libraryPath);
+    m_serverScrobbles.erase(libraryPath);
+}
+
+void SubsonicProvider::fetchServerInfo(const QString& libraryPath, const Account& account, std::function<void()> done)
+{
+    auto finish = [this, libraryPath, done = std::move(done)]() {
+        Q_EMIT serverInfoChanged(libraryPath);
+        if(done) {
+            done();
+        }
+    };
+
+    QUrlQuery user;
+    user.addQueryItem(u"username"_s, account.username);
+    call(account, u"getUser"_s, user, [this, libraryPath, finish](std::optional<QJsonObject> response, ApiError) {
+        if(response) {
+            const std::scoped_lock lock{m_mutex};
+            if(const auto scrobbles = Subsonic::serverScrobbles(*response)) {
+                m_serverScrobbles[libraryPath] = *scrobbles;
+            }
+            else {
+                m_serverScrobbles.erase(libraryPath);
+            }
+        }
+        finish();
+    });
+}
+
+std::optional<bool> SubsonicProvider::serverScrobbles(const QString& libraryPath) const
+{
+    const std::scoped_lock lock{m_mutex};
+    const auto it = m_serverScrobbles.find(libraryPath);
+    return it != m_serverScrobbles.cend() ? std::optional{it->second} : std::nullopt;
 }
 
 void SubsonicProvider::call(const QString& path, const QString& method, const QUrlQuery& params,
@@ -238,10 +290,18 @@ void SubsonicProvider::call(const Account& account, const QString& method, const
 
 std::optional<Account> SubsonicProvider::accountForPath(const QString& path) const
 {
+    const QString libraryPath = libraryPathFor(path);
     const std::scoped_lock lock{m_mutex};
-    for(const auto& [libraryPath, account] : m_accounts) {
+    const auto it = m_accounts.find(libraryPath);
+    return it != m_accounts.cend() ? std::optional{it->second} : std::nullopt;
+}
+
+QString SubsonicProvider::libraryPathFor(const QString& path) const
+{
+    const std::scoped_lock lock{m_mutex};
+    for(const auto& libraryPath : m_accounts | std::views::keys) {
         if(path == libraryPath || path.startsWith(libraryPath + '/'_L1)) {
-            return account;
+            return libraryPath;
         }
     }
     return {};

@@ -222,6 +222,26 @@ Track songToTrack(const QJsonObject& song, const QString& libraryPath)
     return track;
 }
 
+std::optional<bool> serverScrobbles(const QJsonObject& getUserResponse)
+{
+    const QJsonValue enabled = getUserResponse.value("user"_L1).toObject().value("scrobblingEnabled"_L1);
+    return enabled.isBool() ? std::optional{enabled.toBool()} : std::nullopt;
+}
+
+bool scrobblesLocally(std::optional<bool> choice, std::optional<bool> serverScrobbles)
+{
+    return choice.value_or(serverScrobbles != true);
+}
+
+bool hasExtension(const QJsonObject& response, const QString& name, int version)
+{
+    return std::ranges::any_of(toArray(response.value("openSubsonicExtensions"_L1)), [&](const QJsonValue& value) {
+        const QJsonObject extension = value.toObject();
+        return extension.value("name"_L1).toString() == name
+            && toArray(extension.value("versions"_L1)).contains(QJsonValue{version});
+    });
+}
+
 QString songId(const QString& trackPath)
 {
     return idFromPath(trackPath, u"song"_s);

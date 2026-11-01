@@ -53,7 +53,7 @@ public:
     void searchTracks(const LibraryInfo& library, const QString& query, FetchCallback callback) override;
     [[nodiscard]] RemoteStreamSource createStreamSource(const QUrl& url) const override;
     [[nodiscard]] QUrl resolveUrl(const QUrl& url) const override;
-    [[nodiscard]] bool reportsPlays() const override;
+    [[nodiscard]] bool reportsPlays(const Track& track) const override;
 
     [[nodiscard]] static QString libraryPath(const Account& account);
     [[nodiscard]] bool isProviderPath(const QString& path) const;
@@ -62,6 +62,14 @@ public:
     void loadAccount(const QString& libraryPath);
     bool saveAccount(const QString& libraryPath, const Account& account);
     void removeAccount(const QString& libraryPath);
+
+    /*!
+     * Asks the server of the library at @p libraryPath, using @p account, whether it scrobbles plays itself. Calls
+     * @p done when the answer has arrived; a failed request keeps what was known.
+     */
+    void fetchServerInfo(const QString& libraryPath, const Account& account, std::function<void()> done = {});
+    //! Returns whether the server of @p libraryPath scrobbles the user's plays itself, if it said so.
+    [[nodiscard]] std::optional<bool> serverScrobbles(const QString& libraryPath) const;
 
     //! Calls @p method on the server owning @p path, a library, track or artwork path.
     void call(const QString& path, const QString& method, const QUrlQuery& params, ResponseCallback callback);
@@ -74,8 +82,12 @@ public:
 Q_SIGNALS:
     //! Emitted when the complete track list of the library at @p libraryPath has been fetched.
     void tracksFetched(const QString& libraryPath);
+    //! Emitted when fetchServerInfo() has updated what is known about the server of @p libraryPath.
+    void serverInfoChanged(const QString& libraryPath);
 
 private:
+    //! Returns the library path owning @p path, a library, track or artwork path, or an empty string.
+    [[nodiscard]] QString libraryPathFor(const QString& path) const;
     void finishSync(const std::shared_ptr<SyncState>& state);
 
     void fetchSongs(const std::shared_ptr<SyncState>& state, int offset);
@@ -87,6 +99,8 @@ private:
 
     mutable std::mutex m_mutex;
     std::map<QString, Account> m_accounts;
+    //! By library path, getUser's `scrobblingEnabled` where the server sent it.
+    std::map<QString, bool> m_serverScrobbles;
 };
 } // namespace Subsonic
 } // namespace Fooyin

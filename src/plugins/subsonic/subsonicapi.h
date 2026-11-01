@@ -39,6 +39,8 @@ struct Account
     QUrl url;
     QString username;
     QString password;
+    //! Whether mirage's scrobbler also scrobbles this server's plays; std::nullopt follows the server.
+    std::optional<bool> scrobble;
 };
 
 struct ApiError
@@ -69,6 +71,17 @@ void request(QNetworkAccessManager* network, const Account& account, const QStri
  * Only fields stored in the database are set.
  */
 [[nodiscard]] Track songToTrack(const QJsonObject& song, const QString& libraryPath);
+
+//! Returns getUser's `scrobblingEnabled`: whether the server scrobbles the user's plays itself, if it says.
+[[nodiscard]] std::optional<bool> serverScrobbles(const QJsonObject& getUserResponse);
+/*!
+ * Returns whether mirage's scrobbler also scrobbles a server's plays: the user's @p choice, else on unless the server
+ * scrobbles them itself.
+ */
+[[nodiscard]] bool scrobblesLocally(std::optional<bool> choice, std::optional<bool> serverScrobbles);
+
+//! True if a getOpenSubsonicExtensions response lists version @p version of the extension @p name.
+[[nodiscard]] bool hasExtension(const QJsonObject& response, const QString& name, int version);
 
 //! Returns the song id of a track path, or an empty string.
 [[nodiscard]] QString songId(const QString& trackPath);

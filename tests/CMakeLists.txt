@@ -165,6 +165,14 @@ if(TARGET lyrics)
     target_include_directories(test_structuredlyrics PRIVATE ${CMAKE_SOURCE_DIR}/src/plugins/lyrics)
 endif()
 
+if(TARGET subsonic)
+    fooyin_add_test(
+        test_subsonicapi plugins/subsonic/subsonicapitest.cpp ${CMAKE_SOURCE_DIR}/src/plugins/subsonic/subsonicapi.cpp
+    )
+    target_include_directories(test_subsonicapi PRIVATE ${CMAKE_SOURCE_DIR}/src/plugins/subsonic)
+    target_link_libraries(test_subsonicapi PRIVATE Qt6::Network)
+endif()
+
 fooyin_add_test(test_metadatamatcher gui/metadatalookup/metadatamatchertest.cpp)
 fooyin_add_test(test_metadataapply gui/metadatalookup/metadataapplytest.cpp)
 

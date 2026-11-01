@@ -25,6 +25,7 @@
 #include <core/library/musiclibrary.h>
 #include <utils/settings/settingsmanager.h>
 
+#include <QCheckBox>
 #include <QComboBox>
 #include <QFormLayout>
 #include <QLabel>
@@ -53,7 +54,8 @@ private:
     void populateServers();
     void serverChanged();
     void saveServer();
-    void finishSave(const Account& account, const QString& existingPath);
+    void finishSave(Account account, const QString& existingPath);
+    void updateScrobbleHint();
 
     SubsonicProvider* m_provider;
     LibraryManager* m_libraryManager;
@@ -64,6 +66,10 @@ private:
     QLineEdit* m_url;
     QLineEdit* m_username;
     QLineEdit* m_password;
+    QCheckBox* m_scrobble;
+    QLabel* m_scrobbleHint;
+    //! Set once the user changes m_scrobble, so an untouched box keeps following the server.
+    bool m_scrobbleTouched{false};
     QPushButton* m_save;
     QLabel* m_status;
 };
@@ -78,6 +84,8 @@ SubsonicPageWidget::SubsonicPageWidget(SubsonicProvider* provider, LibraryManage
     , m_url{new QLineEdit(this)}
     , m_username{new QLineEdit(this)}
     , m_password{new QLineEdit(this)}
+    , m_scrobble{new QCheckBox(tr("Also scrobble this server's plays with mirage's scrobbler"), this)}
+    , m_scrobbleHint{new QLabel(this)}
     , m_save{new QPushButton(this)}
     , m_status{new QLabel(this)}
 {
@@ -85,6 +93,7 @@ SubsonicPageWidget::SubsonicPageWidget(SubsonicProvider* provider, LibraryManage
     m_url->setPlaceholderText(u"https://music.example.org"_s);
     m_password->setEchoMode(QLineEdit::Password);
     m_status->setWordWrap(true);
+    m_scrobbleHint->setWordWrap(true);
 
     auto* form = new QFormLayout();
     form->addRow(tr("Server") + u":"_s, m_server);
@@ -101,6 +110,8 @@ SubsonicPageWidget::SubsonicPageWidget(SubsonicProvider* provider, LibraryManage
     auto* layout = new QVBoxLayout(this);
     layout->addWidget(hint);
     layout->addLayout(form);
+    layout->addWidget(m_scrobble);
+    layout->addWidget(m_scrobbleHint);
     layout->addWidget(m_save, 0, Qt::AlignLeft);
     layout->addWidget(m_status);
     layout->addStretch();
@@ -109,6 +120,12 @@ SubsonicPageWidget::SubsonicPageWidget(SubsonicProvider* provider, LibraryManage
 
     QObject::connect(m_server, &QComboBox::currentIndexChanged, this, &SubsonicPageWidget::serverChanged);
     QObject::connect(m_save, &QPushButton::clicked, this, &SubsonicPageWidget::saveServer);
+    QObject::connect(m_scrobble, &QCheckBox::clicked, this, [this]() { m_scrobbleTouched = true; });
+    QObject::connect(m_provider, &SubsonicProvider::serverInfoChanged, this, [this](const QString& libraryPath) {
+        if(libraryPath == m_server->currentData().toString()) {
+            updateScrobbleHint();
+        }
+    });
 }
 
 void SubsonicPageWidget::populateServers()
@@ -140,6 +157,29 @@ void SubsonicPageWidget::serverChanged()
     m_password->setPlaceholderText(path.isEmpty() ? QString{} : tr("Unchanged"));
     m_save->setText(path.isEmpty() ? tr("Add Server") : tr("Save"));
     m_status->clear();
+    m_scrobbleTouched = false;
+    updateScrobbleHint();
+}
+
+void SubsonicPageWidget::updateScrobbleHint()
+{
+    const QString path = m_server->currentData().toString();
+    const auto account = m_provider->accountForPath(path);
+    const auto server  = m_provider->serverScrobbles(path);
+
+    if(!m_scrobbleTouched) {
+        m_scrobble->setChecked(scrobblesLocally(account ? account->scrobble : std::nullopt, server));
+    }
+    if(path.isEmpty()) {
+        m_scrobbleHint->clear();
+    }
+    else if(!server) {
+        m_scrobbleHint->setText(tr("The server didn't say whether it scrobbles your plays to Last.fm."));
+    }
+    else {
+        m_scrobbleHint->setText(*server ? tr("The server says it scrobbles your plays to Last.fm.")
+                                        : tr("The server says it doesn't scrobble your plays to Last.fm."));
+    }
 }
 
 void SubsonicPageWidget::saveServer()
@@ -173,14 +213,29 @@ void SubsonicPageWidget::saveServer()
                 m_status->setText(tr("Connection failed: %1").arg(error.message));
                 return;
             }
-            finishSave(account, existingPath);
+            // The stored choice depends on what the server says it does
+            const QString path = existingPath.isEmpty() ? SubsonicProvider::libraryPath(account) : existingPath;
+            m_provider->fetchServerInfo(path, account, [this, self, account, existingPath]() {
+                if(self) {
+                    finishSave(account, existingPath);
+                }
+            });
         });
 }
 
-void SubsonicPageWidget::finishSave(const Account& account, const QString& existingPath)
+void SubsonicPageWidget::finishSave(Account account, const QString& existingPath)
 {
     // A library path identifies the library, so it stays the same when the server's address changes
     const QString path = existingPath.isEmpty() ? SubsonicProvider::libraryPath(account) : existingPath;
+
+    // Only a choice that differs from the server's default is stored, so an untouched account follows the server
+    const bool followed = scrobblesLocally(std::nullopt, m_provider->serverScrobbles(path));
+    if(m_scrobbleTouched) {
+        account.scrobble = m_scrobble->isChecked() == followed ? std::nullopt : std::optional{m_scrobble->isChecked()};
+    }
+    else if(const auto existing = m_provider->accountForPath(existingPath)) {
+        account.scrobble = existing->scrobble;
+    }
     if(!m_provider->saveAccount(path, account)) {
         m_status->setText(tr("Failed to save the account."));
         return;
