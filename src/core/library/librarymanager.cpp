@@ -87,6 +87,7 @@ public:
     LibraryDatabase m_libraryConnector;
     TrackDatabase m_trackConnector;
     LibraryInfoMap m_libraries;
+    bool m_providersOnly{false};
 };
 
 LibraryManager::LibraryManager(DbConnectionPoolPtr dbPool, SettingsManager* settings, QObject* parent)
@@ -104,7 +105,16 @@ void LibraryManager::reset()
 
     p->m_libraries.clear();
     p->m_libraryConnector.getAllLibraries(p->m_libraries);
+    if(p->m_providersOnly) {
+        std::erase_if(p->m_libraries, [](const auto& library) { return !Track::isVirtualPath(library.second.path); });
+    }
     Q_EMIT librariesChanged();
+}
+
+void LibraryManager::setProvidersOnly(bool providersOnly)
+{
+    p->m_providersOnly = providersOnly;
+    reset();
 }
 
 const LibraryInfoMap& LibraryManager::allLibraries() const

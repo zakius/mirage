@@ -454,6 +454,11 @@ QCoro::Task<> UnifiedMusicLibraryPrivate::commitLoadTracks(TrackList tracksToLoa
 {
     const QPointer lifetime{m_self};
 
+    // Tracks of hidden libraries stay in the database but are not loaded
+    std::erase_if(tracksToLoad, [this](const Track& track) {
+        return track.isInLibrary() && !m_libraryManager->hasLibrary(track.libraryId());
+    });
+
     if(tracksToLoad.empty()) {
         m_tracks.clear();
         Q_EMIT m_self->tracksLoaded({});

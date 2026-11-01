@@ -139,6 +139,8 @@ Application::Application(QObject* parent)
 {
     m_remoteIo->setLibraryProviders(m_libraryProviders);
     m_library->setLibraryProviders(m_libraryProviders);
+    // mirage: libraries are Subsonic servers; folder libraries from older builds stay in the database but are hidden
+    m_libraryManager->setProvidersOnly(true);
     m_audioLoader->setRemoteSourceProvider(m_remoteIo);
     m_translations.initialiseTranslations(m_settings->value<Settings::Core::Language>());
     loadDatabaseSettings();

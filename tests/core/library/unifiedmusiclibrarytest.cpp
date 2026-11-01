@@ -713,6 +713,26 @@ TEST_F(UnifiedMusicLibraryTest, OnlyProviderLibrariesCanBeAdded)
     EXPECT_GT(context().libraryManager.addLibrary(u"fake://server"_s, u"Server"_s), 0);
 }
 
+TEST_F(UnifiedMusicLibraryTest, ProvidersOnlyHidesFolderLibrariesWithoutDeletingThem)
+{
+    // mirage: a folder library from an older build is hidden, with its tracks, but kept in the database
+    createTrackFile(u"local_track.mp3"_s, u"Local"_s);
+    const LibraryInfo libraryInfo = addLibrary(u"Folder"_s);
+    waitForSuccessfulScan([&]() { return context().library.rescan(libraryInfo); });
+    ASSERT_EQ(context().library.libraryTracks().size(), 1);
+
+    context().libraryManager.setProvidersOnly(true);
+    EXPECT_FALSE(context().libraryManager.hasLibrary(libraryInfo.id));
+
+    QSignalSpy loadedSpy{&context().library, &MusicLibrary::tracksLoaded};
+    context().library.loadAllTracks();
+    waitForSignal(loadedSpy);
+    EXPECT_TRUE(context().library.libraryTracks().empty());
+
+    context().libraryManager.setProvidersOnly(false);
+    EXPECT_TRUE(context().libraryManager.hasLibrary(libraryInfo.id));
+}
+
 TEST_F(UnifiedMusicLibraryTest, FailedProviderFetchKeepsTracks)
 {
     auto provider  = std::make_shared<FakeLibraryProvider>();

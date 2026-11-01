@@ -42,6 +42,8 @@ public:
     ~LibraryManager() override;
 
     void reset();
+    //! Hides libraries that are not backed by a library provider (folder libraries). They stay in the database.
+    void setProvidersOnly(bool providersOnly);
 
     [[nodiscard]] const LibraryInfoMap& allLibraries() const;
 
