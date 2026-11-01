@@ -89,7 +89,9 @@ void startChunkRequest(const std::shared_ptr<QNetworkAccessManager>& network, co
     QNetworkRequest request = makeNetworkRequest(url);
     request.setRawHeader("Range", "bytes=" + QByteArray::number(chunk * ChunkSize) + "-"
                                       + QByteArray::number(((chunk + 1) * ChunkSize) - 1));
-    request.setTransferTimeout(std::chrono::duration_cast<std::chrono::milliseconds>(RequestTimeout));
+    // The std::chrono overload needs Qt 6.7
+    request.setTransferTimeout(
+        static_cast<int>(std::chrono::duration_cast<std::chrono::milliseconds>(RequestTimeout).count()));
 
     auto* reply = network->get(request);
 
