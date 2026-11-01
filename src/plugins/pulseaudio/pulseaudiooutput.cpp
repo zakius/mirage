@@ -471,7 +471,7 @@ bool PulseAudioOutput::initContext()
     }
     m_mainLoop = {rawLoop, PaMainLoopDeleter()};
 
-    pa_context* rawContext{pa_context_new(pa_threaded_mainloop_get_api(m_mainLoop.get()), "fooyin")};
+    pa_context* rawContext{pa_context_new(pa_threaded_mainloop_get_api(m_mainLoop.get()), "mirage")};
     if(rawContext == nullptr) {
         setError(u"Failed to allocate PulseAudio context"_s);
         return false;

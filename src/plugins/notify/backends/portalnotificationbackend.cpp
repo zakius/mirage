@@ -29,7 +29,7 @@ constexpr auto PortalDbusService    = "org.freedesktop.portal.Desktop";
 constexpr auto PortalDbusPath       = "/org/freedesktop/portal/desktop";
 constexpr auto PortalDbusInterface  = "org.freedesktop.portal.Notification";
 constexpr auto PortalNotificationId = "track-change";
-constexpr auto NotificationIconName = "org.fooyin.fooyin";
+constexpr auto NotificationIconName = "io.github.zakius.mirage";
 constexpr int DefaultTimeoutMs      = 5000;
 
 namespace {

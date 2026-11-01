@@ -123,7 +123,7 @@ bool JackOutput::init(const AudioFormat& format)
         return false;
     }
 
-    m_client = jack_client_open("fooyin", JackNoStartServer, nullptr);
+    m_client = jack_client_open("mirage", JackNoStartServer, nullptr);
     if(!m_client) {
         setError(u"Unable to open JACK client"_s);
         return false;
@@ -257,7 +257,7 @@ OutputDevices JackOutput::getAllDevices(bool /*isCurrentOutput*/)
     OutputDevices devices;
     devices.emplace_back(u"default"_s, u"Default"_s);
 
-    const ClientHandle handle{jack_client_open("fooyin_devices", JackNoStartServer, nullptr)};
+    const ClientHandle handle{jack_client_open("mirage_devices", JackNoStartServer, nullptr)};
     if(!handle) {
         return devices;
     }

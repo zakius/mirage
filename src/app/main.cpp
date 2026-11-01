@@ -225,7 +225,7 @@ int main(int argc, char** argv)
 
         if(commandLine.empty()) {
             QLoggingCategory log{"Main"};
-            qCInfo(log) << "fooyin already running";
+            qCInfo(log) << "mirage already running";
             instance.sendMessage({});
         }
         else {

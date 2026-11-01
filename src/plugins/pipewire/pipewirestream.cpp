@@ -54,8 +54,8 @@ PipewireStream::PipewireStream(PipewireCore* core, const AudioFormat& format, co
     : m_channelCount{static_cast<uint32_t>(std::max(1, format.channelCount()))}
 {
     struct pw_properties* props = pw_properties_new(PW_KEY_MEDIA_TYPE, "Audio", PW_KEY_MEDIA_CATEGORY, "Playback",
-                                                    PW_KEY_MEDIA_ROLE, "Music", PW_KEY_APP_ID, "fooyin",
-                                                    PW_KEY_APP_ICON_NAME, "fooyin", PW_KEY_APP_NAME, "fooyin", nullptr);
+                                                    PW_KEY_MEDIA_ROLE, "Music", PW_KEY_APP_ID, "io.github.zakius.mirage",
+                                                    PW_KEY_APP_ICON_NAME, "io.github.zakius.mirage", PW_KEY_APP_NAME, "mirage", nullptr);
 
     pw_properties_setf(props, PW_KEY_NODE_RATE, "1/%u", format.sampleRate());
     if(latencyFrames > 0 && format.sampleRate() > 0) {
