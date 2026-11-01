@@ -19,6 +19,7 @@
 
 #include <core/constants.h>
 #include <core/ratingsymbols.h>
+#include <core/scripting/displayname.h>
 #include <core/scripting/scriptparser.h>
 #include <core/scripting/scriptregistry.h>
 #include <core/scripting/scriptscanner.h>
@@ -299,6 +300,28 @@ TEST_F(ScriptParserTest, StringTest)
     EXPECT_EQ(u"00FF", m_parser.evaluate(u"$hex(255,4)"_s));
     EXPECT_EQ(u"CBF43926", m_parser.evaluate(u"$hex($crc32(123456789),8)"_s));
     EXPECT_EQ(u"FFFF", m_parser.evaluate(u"$hex(65535,2)"_s));
+}
+
+TEST_F(ScriptParserTest, DisplayNameTest)
+{
+    using Scripting::NameDisplay;
+
+    // Shows originals until a plugin sets the display
+    EXPECT_EQ(u"東京事変", m_parser.evaluate(u"$display_name(東京事変,Tokyo Jihen)"_s));
+
+    Scripting::setNameDisplay(NameDisplay::Romanized);
+    EXPECT_EQ(u"Tokyo Jihen", m_parser.evaluate(u"$display_name(東京事変,Tokyo Jihen)"_s));
+    // A missing romanized form shows the original
+    EXPECT_EQ(u"Artist", m_parser.evaluate(u"$display_name(Artist,)"_s));
+    EXPECT_EQ(u"Artist", m_parser.evaluate(u"$display_name(Artist)"_s));
+    EXPECT_EQ(u"", m_parser.evaluate(u"$display_name(,Latin)"_s));
+
+    Scripting::setNameDisplay(NameDisplay::Both);
+    EXPECT_EQ(u"東京事変 (Tokyo Jihen)", m_parser.evaluate(u"$display_name(東京事変,Tokyo Jihen)"_s));
+    EXPECT_EQ(u"Tokyo Jihen", m_parser.evaluate(u"$display_name(Tokyo Jihen,Tokyo Jihen)"_s));
+
+    Scripting::setNameDisplay(NameDisplay::Original);
+    EXPECT_EQ(u"東京事変", m_parser.evaluate(u"$display_name(東京事変,Tokyo Jihen)"_s));
 }
 
 TEST_F(ScriptParserTest, ApplicationLinkTest)
