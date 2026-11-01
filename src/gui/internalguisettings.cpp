@@ -188,8 +188,9 @@ GuiSettings::GuiSettings(SettingsManager* settingsManager)
     m_settings->createTempSetting<Internal::SystemPalette>(QApplication::palette());
     m_settings->createTempSetting<Settings::Gui::ResolvedAppStyle>(QVariant::fromValue(appStyle()));
 
-    m_settings->createSetting<Internal::WindowTitleTrackScript>(u"[%albumartist% - ]%title% \"[fooyin]\""_s,
-                                                                u"Interface/WindowTitleTrackScript"_s);
+    m_settings->createSetting<Internal::WindowTitleTrackScript>(
+        u"[$display_name(%albumartist%,%albumartistlatin%) - ]$display_name(%title%,%titlelatin%) \"[fooyin]\""_s,
+        u"Interface/WindowTitleTrackScript"_s);
     m_settings->createSetting<Internal::TrackCoverPaths>(QVariant::fromValue(defaultCoverPaths()), u"Artwork/Paths"_s);
     m_settings->createSetting<Internal::TrackCoverSourcePreference>(
         static_cast<int>(ArtworkSourcePreference::PreferDirectory), u"Artwork/LocalSourcePreference"_s);

@@ -25,7 +25,7 @@ namespace Fooyin {
 namespace {
 QString albumHeaderScript(const QString& albumScript)
 {
-    return u"<b><sized=2>$if2(%albumartist%,Unknown Artist)</sized></b>\n$crlf()\n"
+    return u"<b><sized=2>$if2($display_name(%albumartist%,%albumartistlatin%),Unknown Artist)</sized></b>\n$crlf()\n"
            "<sized=1>"_s
          + albumScript
          + u"</sized><hr/><right><b><sized=2>%year%</sized></b></right>\n$crlf()\n"
@@ -53,7 +53,8 @@ void PresetRegistry::loadDefaults()
     preset.name = tr("Track list");
 
     preset.track.text.script = u"$padright(,$mul($sub(%depth%,1),5))[%playingicon%  ][\\[%queueindexes%\\]  ]"
-                               "[$num(%track%,2).  ]%title%[<alpha=180>  ▪  %trackartist%</alpha>]\n"
+                               "[$num(%track%,2).  ]$display_name(%title%,%titlelatin%)"
+                               "[<alpha=180>  ▪  $display_name(%trackartist%,%trackartistlatin%)</alpha>]\n"
                                "<right>\n"
                                "$ifgreater(%playcount%,0,%playcount% |)      %duration%"_s;
 
@@ -62,7 +63,7 @@ void PresetRegistry::loadDefaults()
     preset.name = tr("Albums grouped by disc");
 
     preset.header.grouping    = u"%albumartist%|%album%"_s;
-    preset.header.text.script = albumHeaderScript(u"$if2(%album%,Unknown Album)"_s);
+    preset.header.text.script = albumHeaderScript(u"$if2($display_name(%album%,%albumlatin%),Unknown Album)"_s);
 
     SubheaderRow subheader;
     subheader.grouping    = u"%disc%"_s;
@@ -79,7 +80,8 @@ void PresetRegistry::loadDefaults()
 
     preset.header.grouping = u"%albumartist%|%album%|%disc%"_s;
     preset.header.text.script
-        = albumHeaderScript(u"$if2(%album%,Unknown Album)$ifgreater(%disctotal%,1, ▪ Disc #%disc%)"_s);
+        = albumHeaderScript(u"$if2($display_name(%album%,%albumlatin%),Unknown Album)"
+                            "$ifgreater(%disctotal%,1, ▪ Disc #%disc%)"_s);
 
     addDefaultItem(preset);
 
@@ -88,7 +90,8 @@ void PresetRegistry::loadDefaults()
     preset.header.grouping  = u"%albumartist%|%album%"_s;
     preset.header.showCover = false;
     preset.header.text.script
-        = u"<b><sized=2>$if2(%albumartist%,Unknown Artist) ▪ $if2(%album%,Unknown Album)</sized></b>\n"
+        = u"<b><sized=2>$if2($display_name(%albumartist%,%albumartistlatin%),Unknown Artist) ▪ "
+          "$if2($display_name(%album%,%albumlatin%),Unknown Album)</sized></b>\n"
           "<hr/>\n<right><b><sized=2>%year%</sized></b>"_s;
 
     addDefaultItem(preset);

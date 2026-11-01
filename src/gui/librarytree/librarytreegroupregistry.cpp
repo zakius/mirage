@@ -38,11 +38,14 @@ void LibraryTreeGroupRegistry::loadDefaults()
 {
     addDefaultItem({.id         = 0,
                     .name       = tr("Artist/Album"),
-                    .script     = u"[%albumartist%]||[%album%][ (%year%)]||[%disc%.][$num(%track%,2). ]%title%"_s,
+                    .script     = u"[$display_name(%albumartist%,%albumartistlatin%)]||"
+                                  "[$display_name(%album%,%albumlatin%)][ (%year%)]||"
+                                  "[%disc%.][$num(%track%,2). ]$display_name(%title%,%titlelatin%)"_s,
                     .sortScript = {}});
     addDefaultItem({.id         = 1,
                     .name       = tr("Album"),
-                    .script     = u"[%album%][ (%year%)]||[%disc%.][$num(%track%,2). ]%title%"_s,
+                    .script     = u"[$display_name(%album%,%albumlatin%)][ (%year%)]||"
+                                  "[%disc%.][$num(%track%,2). ]$display_name(%title%,%titlelatin%)"_s,
                     .sortScript = {}});
     addDefaultItem(
         {.id = 2, .name = tr("Folder Structure"), .script = u"$replace(%relativepath%,/,||)"_s, .sortScript = {}});
