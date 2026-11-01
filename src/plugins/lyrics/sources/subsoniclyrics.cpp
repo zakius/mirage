@@ -89,14 +89,19 @@ void SubsonicLyrics::search(const SearchParams& params)
 
     get(u"getOpenSubsonicExtensions"_s, {}, [this](const QJsonObject& response) {
         const QJsonArray extensions = toArray(response.value("openSubsonicExtensions"_L1));
-        const auto has              = [&extensions](QLatin1String name) {
-            return std::ranges::any_of(extensions, [name](const QJsonValue& extension) {
-                return extension.toObject().value("name"_L1) == name;
+        //! True if the server lists @p name, at @p version unless it is 0.
+        const auto has              = [&extensions](QLatin1String name, int version = 0) {
+            return std::ranges::any_of(extensions, [name, version](const QJsonValue& extension) {
+                const QJsonObject object = extension.toObject();
+                return object.value("name"_L1) == name
+                    && (version == 0 || toArray(object.value("versions"_L1)).contains(version));
             });
         };
         // Servers without OpenSubsonic answer with an error; a failed request is asked again next time
         if(!response.isEmpty()) {
-            m_extensions[m_server] = {.songLyrics = has("songLyrics"_L1), .romanization = has("romanization"_L1)};
+            // `enhanced` and `kinds` belong to songLyrics v2
+            m_extensions[m_server] = {.songLyrics   = has("songLyrics"_L1),
+                                      .romanization = has("romanization"_L1, 1) && has("songLyrics"_L1, 2)};
         }
         requestLyrics();
     });
