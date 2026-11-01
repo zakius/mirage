@@ -161,6 +161,8 @@ public:
     int dropUploadTrack{0};
     //! The uploadTrack call (counting from 1) that the server refuses with an API error.
     int refuseUploadTrack{0};
+    //! Refuses the first file that completes, as a file failing the format check, and drops it.
+    bool refuseFormatOnce{false};
     //! Slots for a createUpload with a releaseId.
     std::vector<std::pair<int, int>> releaseSlots{{1, 1}, {1, 2}};
 
@@ -280,6 +282,11 @@ private:
                 return {};
             }
             slot->data.append(body);
+            if(refuseFormatOnce && slot->data.size() == slot->size) {
+                refuseFormatOnce = false;
+                slot->data.clear();
+                return error(0, u"Not a FLAC file"_s);
+            }
             return ok({{u"uploadTrack"_s, QJsonObject{{u"received"_s, slot->data.size()}}}});
         }
         if(method == "getUpload"_L1) {
@@ -449,6 +456,32 @@ TEST_F(SubsonicUploadTest, StopsOnAServerErrorAndContinuesWhenRetried)
     ASSERT_TRUE(waitFor([&committed]() { return committed; }));
     EXPECT_EQ(data, m_server->uploads.at(u"up-1"_s).front().data);
     EXPECT_EQ(1, m_server->calls.count(u"createUpload"_s));
+}
+
+TEST_F(SubsonicUploadTest, RetriesFromWhatTheServerKeptAfterItDroppedAFile)
+{
+    const QByteArray data{"0123456789"};
+    Subsonic::Uploader uploader{m_server.get(), m_account, albumOf({writeFile(u"1.flac"_s, data)})};
+    uploader.setChunkSize(4);
+    m_server->refuseFormatOnce = true;
+
+    std::optional<Subsonic::ApiError> failure;
+    bool committed{false};
+    QObject::connect(&uploader, &Subsonic::Uploader::failed,
+                     [&failure](const Subsonic::ApiError& error) { failure = error; });
+    QObject::connect(&uploader, &Subsonic::Uploader::committed, [&committed]() { committed = true; });
+    uploader.start();
+
+    ASSERT_TRUE(waitFor([&failure]() { return failure.has_value(); }));
+    EXPECT_EQ(u"Not a FLAC file"_s, failure->message);
+
+    // The server dropped the file, so the retry sends it again from the start
+    const auto calls = m_server->calls.size();
+    uploader.start();
+    ASSERT_TRUE(waitFor([&committed]() { return committed; }));
+    EXPECT_EQ(u"getUpload"_s, m_server->calls.at(calls));
+    EXPECT_EQ(u"0"_s, m_server->queries.at(calls + 1).queryItemValue(u"offset"_s));
+    EXPECT_EQ(data, m_server->uploads.at(u"up-1"_s).front().data);
 }
 
 TEST_F(SubsonicUploadTest, OffersReplaceOnlyForAnAlbumAlreadyInTheLibrary)

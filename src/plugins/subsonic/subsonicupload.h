@@ -91,7 +91,7 @@ struct DiscRelease
 /*!
  * Sends an upload to a server: `createUpload`, then each file in chunks through `uploadTrack`, then `commitUpload`.
  * A chunk that fails on the network is resumed from the size `getUpload` reports, up to three times in a row. After
- * failed(), start() continues where the upload stopped. A work folder set with setWorkFolder() is deleted once the
+ * failed(), start() asks `getUpload` again and continues from what the server kept. A work folder set with setWorkFolder() is deleted once the
  * upload is committed or cancelled, or the uploader is destroyed.
  */
 class Uploader : public QObject
@@ -133,7 +133,8 @@ private:
 
     void createUpload();
     void sendNext();
-    void resume(size_t index);
+    //! Asks getUpload what the server stored, and continues from there.
+    void sync();
     void commit(bool replace);
     void fail(const ApiError& error);
     void removeWorkFolder();

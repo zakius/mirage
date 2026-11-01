@@ -213,7 +213,8 @@ void Uploader::start()
         createUpload();
     }
     else {
-        sendNext();
+        // The server may have dropped a file since, for example one that failed its format check
+        sync();
     }
 }
 
@@ -348,7 +349,7 @@ void Uploader::sendNext()
                        if(!response) {
                            // Network failures resume from what the server stored; API errors stop the upload
                            if(error.code < 0 && ++m_failures < MaxFailures) {
-                               resume(index);
+                               sync();
                            }
                            else {
                                fail(error);
@@ -373,39 +374,40 @@ void Uploader::sendNext()
     });
 }
 
-void Uploader::resume(size_t index)
+void Uploader::sync()
 {
     QUrlQuery params;
     params.addQueryItem(u"id"_s, m_uploadId);
 
-    m_reply = request(
-        m_network, m_account, u"getUpload"_s, params, this,
-        [this, index](std::optional<QJsonObject> response, const ApiError& error) {
-            if(m_cancelled) {
-                return;
-            }
-            if(!response) {
-                if(error.code < 0 && ++m_failures < MaxFailures) {
-                    resume(index);
-                }
-                else {
-                    fail(error);
-                }
-                return;
-            }
+    m_reply = request(m_network, m_account, u"getUpload"_s, params, this,
+                      [this](std::optional<QJsonObject> response, const ApiError& error) {
+                          if(m_cancelled) {
+                              return;
+                          }
+                          if(!response) {
+                              if(error.code < 0 && ++m_failures < MaxFailures) {
+                                  sync();
+                              }
+                              else {
+                                  fail(error);
+                              }
+                              return;
+                          }
 
-            Slot& current = m_slots.at(index);
-            for(const auto& item : toArray(response->value("upload"_L1).toObject().value("track"_L1))) {
-                const QJsonObject track = item.toObject();
-                if(track.value("disc"_L1).toInt(1) == current.disc
-                   && track.value("number"_L1).toInt() == current.number) {
-                    current.received
-                        = std::clamp(static_cast<qint64>(track.value("received"_L1).toDouble()), qint64{0}, current.size);
-                }
-            }
-            Q_EMIT progress(sentBytes(), totalBytes());
-            sendNext();
-        });
+                          for(const auto& item : toArray(response->value("upload"_L1).toObject().value("track"_L1))) {
+                              const QJsonObject track = item.toObject();
+                              const auto slot         = std::ranges::find_if(m_slots, [&track](const Slot& s) {
+                                  return track.value("disc"_L1).toInt(1) == s.disc
+                                      && track.value("number"_L1).toInt() == s.number;
+                              });
+                              if(slot != m_slots.end()) {
+                                  slot->received = std::clamp(static_cast<qint64>(track.value("received"_L1).toDouble()),
+                                                              qint64{0}, slot->size);
+                              }
+                          }
+                          Q_EMIT progress(sentBytes(), totalBytes());
+                          sendNext();
+                      });
 }
 
 void Uploader::commit(bool replace)
