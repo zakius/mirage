@@ -25,6 +25,7 @@
 #include <gui/guiconstants.h>
 #include <gui/iconloader.h>
 #include <gui/widgetcontainer.h>
+#include <utils/mirage.h>
 
 #include <QAction>
 #include <QLoggingCategory>
@@ -171,6 +172,11 @@ std::vector<WidgetCatalogueEntry> WidgetProvider::widgetCatalogue() const
 bool WidgetProvider::registerWidget(const QString& key, std::function<FyWidget*()> instantiator,
                                     const QString& displayName, WidgetRegistrationOptions options)
 {
+    // mirage: widgets for local files are not offered
+    if(Mirage::isLocalMediaId(Id{key})) {
+        return false;
+    }
+
     if(p->m_widgets.contains(key)) {
         qCWarning(WIDGET_PROV) << "Subclass already registered";
         return false;

@@ -22,6 +22,7 @@
 #include "menucontainer.h"
 
 #include <utils/actions/command.h>
+#include <utils/mirage.h>
 #include <utils/settings/settingsmanager.h>
 
 #include <QAction>
@@ -459,6 +460,11 @@ Command* ActionManager::registerCommand(const Id& id)
 
 Command* ActionManager::registerAction(QAction* action, const Id& id, const Context& context)
 {
+    // mirage: actions on local files stay registered but hidden, which also turns off their shortcuts
+    if(Mirage::isLocalMediaId(id)) {
+        action->setVisible(false);
+    }
+
     Command* command = p->overridableAction(id);
     if(command) {
         command->addOverrideAction(action, context, !p->m_contextOverride);

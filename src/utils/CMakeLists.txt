@@ -28,6 +28,7 @@ set(SOURCES
     ${CMAKE_SOURCE_DIR}/include/utils/id.h
     ${CMAKE_SOURCE_DIR}/include/utils/itemregistry.h
     ${CMAKE_SOURCE_DIR}/include/utils/jsonutils.h
+    ${CMAKE_SOURCE_DIR}/include/utils/mirage.h
     ${CMAKE_SOURCE_DIR}/include/utils/lockfreeringbuffer.h
     ${CMAKE_SOURCE_DIR}/include/utils/logging/messagehandler.h
     ${CMAKE_SOURCE_DIR}/include/utils/modelutils.h
@@ -77,6 +78,7 @@ set(SOURCES
     id.cpp
     itemregistry.cpp
     jsonutils.cpp
+    mirage.cpp
     logging/logmodel.cpp
     logging/logmodel.h
     logging/logwidget.cpp

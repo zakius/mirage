@@ -22,6 +22,7 @@
 #include "settingsdialog.h"
 
 #include <utils/id.h>
+#include <utils/mirage.h>
 #include <utils/settings/settingsmanager.h>
 #include <utils/settings/settingspage.h>
 
@@ -149,7 +150,11 @@ void SettingsDialogController::openAtPage(const Id& page)
 
     p->applyPageStates();
 
-    auto* settingsDialog = new SettingsDialog{p->pages, p->mainWindow};
+    // mirage: pages for local files are hidden
+    PageList pages;
+    std::ranges::copy_if(p->pages, std::back_inserter(pages),
+                         [](const SettingsPage* settingsPage) { return !Mirage::isLocalMediaId(settingsPage->id()); });
+    auto* settingsDialog = new SettingsDialog{pages, p->mainWindow};
     settingsDialog->setSearchBarPosition(p->searchBarPosition);
     p->dialog = settingsDialog;
 

@@ -37,6 +37,7 @@
 #include <utils/actions/actionmanager.h>
 #include <utils/actions/command.h>
 #include <utils/fileutils.h>
+#include <utils/mirage.h>
 #include <utils/settings/settingsmanager.h>
 #include <utils/utils.h>
 
@@ -764,7 +765,7 @@ void TrackSelectionControllerPrivate::renderChildNodes(QMenu* menu, const std::v
 void TrackSelectionControllerPrivate::appendNodeInfo(const MenuNode& node,
                                                      std::vector<TrackContextMenuNodeInfo>& nodes) const
 {
-    if(node.type != MenuNodeType::Root && node.id.isValid() && node.owner) {
+    if(node.type != MenuNodeType::Root && node.id.isValid() && node.owner && !Mirage::isLocalMediaId(node.id)) {
         nodes.push_back(
             {.id       = node.id,
              .parentId = node.parent && node.parent->id.isValid() ? std::optional<Id>{node.parent->id} : std::nullopt,
@@ -866,7 +867,8 @@ void TrackSelectionControllerPrivate::refreshDisabledNodes()
 
 bool TrackSelectionControllerPrivate::isNodeDisabled(const Id& id) const
 {
-    return !ContextMenuUtils::showAllActions() && m_disabledNodeIds.contains(id);
+    // mirage: entries for local files are never shown
+    return Mirage::isLocalMediaId(id) || (!ContextMenuUtils::showAllActions() && m_disabledNodeIds.contains(id));
 }
 
 bool TrackSelectionControllerPrivate::hasVisibleActions(const QMenu* menu)
