@@ -48,6 +48,12 @@ void SelectionInfoFieldRegistry::loadDefaultFields()
     addDefaultItem({.name = tr("Genre"), .scriptField = QString::fromLatin1(Genre).toLower()}, true);
     addDefaultItem({.name = tr("Album Artist"), .scriptField = QString::fromLatin1(AlbumArtist).toLower()}, true);
     addDefaultItem({.name = tr("Track Number"), .scriptField = QString::fromLatin1(TrackNumber).toLower()}, true);
+    // mirage: the properties view shows every field the server sends; empty fields are left out
+    addDefaultItem({.name = tr("Disc Number"), .scriptField = QString::fromLatin1(Disc).toLower()}, true);
+    addDefaultItem({.name = tr("Composer"), .scriptField = QString::fromLatin1(Composer).toLower()}, true);
+    addDefaultItem({.name = tr("Performer"), .scriptField = QString::fromLatin1(Performer).toLower()}, true);
+    addDefaultItem({.name = tr("Comment"), .scriptField = QString::fromLatin1(Comment).toLower()}, true);
+    addDefaultItem({.name = tr("Rating"), .scriptField = QString::fromLatin1(Rating).toLower()}, true);
 }
 
 void SelectionInfoFieldRegistry::resetToDefaults()

@@ -972,6 +972,11 @@ void Widgets::registerPropertiesTabs()
         return new InfoPropertiesTab(tracks, m_core->libraryManager(), m_gui->actionManager(), m_settings,
                                      m_selectionInfoFieldRegistry, m_window);
     });
+    // mirage: the ReplayGain and Artwork tabs edit local files; the Details tab shows the server's values
+    constexpr bool ShowFileEditorTabs{false};
+    if(!ShowFileEditorTabs) {
+        return;
+    }
     m_gui->propertiesDialog()->addTab(tr("ReplayGain"), [this](const TrackList& tracks) {
         const bool canWrite = std::ranges::all_of(tracks, [this](const Track& track) {
             return track.isMetadataEditable(m_core->audioLoader()->canWriteMetadata(track));

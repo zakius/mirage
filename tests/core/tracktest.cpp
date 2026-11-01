@@ -122,7 +122,18 @@ TEST(TrackTest, DerivesPathFieldsForVirtualUrls)
     EXPECT_EQ(3, track.subsong());
 
     track.setId(1);
-    EXPECT_TRUE(track.isMetadataEditable(false));
+    // mirage: database-only metadata is not editable, because the server owns it
+    EXPECT_FALSE(track.isMetadataEditable(false));
+}
+
+TEST(TrackTest, ServerTrackMetadataIsReadOnly)
+{
+    Track track{u"subsonic://alice@music.example.org:4533/song/42"_s};
+    track.setId(1);
+
+    EXPECT_TRUE(track.isDatabaseOnlyMetadata());
+    EXPECT_FALSE(track.isMetadataEditable(true));
+    EXPECT_TRUE(Track{u"/music/song.flac"_s}.isMetadataEditable(true));
 }
 
 TEST(TrackTest, RejectsLocalNetworkArchiveAndMalformedPathsAsVirtual)

@@ -851,7 +851,10 @@ void PropertiesDialogWidget::currentTabChanged(int index)
         applyTrackScope(widget);
         tab->load(m_session.workingTracks());
         if(m_applyButton) {
-            m_applyButton->setHidden(!widget->canApply());
+            // mirage: server tracks are read-only, so there is nothing to apply
+            m_applyButton->setHidden(!widget->canApply()
+                                     || std::ranges::all_of(m_session.workingTracks(),
+                                                            &Track::isDatabaseOnlyMetadata));
         }
     }
 }

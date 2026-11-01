@@ -188,6 +188,11 @@ InfoPanel::InfoPanel(TrackList tracks, LibraryManager* libraryManager, ActionMan
         Gui::updateItemViewStyle(m_view, resolvedStyle.palette);
     });
 
+    // mirage: the properties dialog is the full read-only view of everything the server sends
+    if(persistSettings) {
+        m_model->setOptions(InfoItem::Options{InfoItem::Default} | InfoItem::ExtendedMetadata | InfoItem::ReplayGain);
+    }
+
     setupActions();
     loadPersistentSettings();
     finalise();

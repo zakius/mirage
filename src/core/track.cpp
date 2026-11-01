@@ -846,7 +846,8 @@ bool Track::isDatabaseOnlyMetadata() const
 
 bool Track::isMetadataEditable(bool sourceWritable) const
 {
-    return !hasCue() && !isInArchive() && ((isInDatabase() && isDatabaseOnlyMetadata()) || sourceWritable);
+    // mirage: the server owns the metadata of remote and virtual tracks, and Subsonic cannot edit it
+    return !hasCue() && !isInArchive() && !isDatabaseOnlyMetadata() && sourceWritable;
 }
 
 QString Track::archivePath() const

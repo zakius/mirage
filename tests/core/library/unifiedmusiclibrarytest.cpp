@@ -1018,7 +1018,8 @@ TEST_F(UnifiedMusicLibraryTest, VirtualTrackMetadataIsStoredOnlyInDatabase)
 
     virtualTrack = playlist->tracks().front();
     ASSERT_TRUE(virtualTrack.isInDatabase());
-    ASSERT_TRUE(virtualTrack.isMetadataEditable(context().audioLoader->canWriteMetadata(virtualTrack)));
+    // mirage: the UI does not edit database-only metadata, because the server owns it; the core still stores it
+    EXPECT_FALSE(virtualTrack.isMetadataEditable(context().audioLoader->canWriteMetadata(virtualTrack)));
 
     virtualTrack.setTitle(u"After"_s);
     QSignalSpy metadataSpy{&context().library, &MusicLibrary::tracksMetadataChanged};

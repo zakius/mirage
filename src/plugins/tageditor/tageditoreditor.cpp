@@ -175,6 +175,11 @@ void TagEditorEditor::updateEditState()
     m_view->removeRowAction()->setDisabled(readOnly || m_view->selectionModel()->selectedIndexes().empty());
     m_autoTrackNum->setDisabled(readOnly);
     m_autoFillValuesAction->setDisabled(readOnly);
+
+    // mirage: a read-only editor shows server tracks, so it lists only the fields the server sent
+    for(int row{0}; row < m_model->rowCount({}); ++row) {
+        m_view->setRowHidden(row, m_readOnly && m_model->index(row, 1, {}).data().toString().isEmpty());
+    }
 }
 
 void TagEditorEditor::configureDelegates(const std::vector<TagEditorField>& items)
