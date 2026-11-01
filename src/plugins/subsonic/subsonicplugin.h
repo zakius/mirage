@@ -27,6 +27,7 @@
 
 #include <QTimer>
 
+#include <map>
 #include <set>
 
 namespace Fooyin {
@@ -53,9 +54,10 @@ private:
     void scrobble(const Track& track, bool submission);
     void writeStats(const TrackList& tracks, Track::Stats stats);
     void syncPlaylists(const QString& libraryPath);
-    void playlistEdited(const Playlist* playlist);
+    void playlistEdited(Playlist* playlist);
     void playlistRemoved(const Playlist* playlist);
     void pushPlaylists();
+    void deletePlaylist(const QString& key);
     [[nodiscard]] std::optional<QString> defaultServer() const;
     void uploadPlaylist(Playlist* playlist);
     void linkPlaylist(const UId& id, const QString& server, const QString& serverId);
@@ -66,8 +68,12 @@ private:
     SettingsManager* m_settings{nullptr};
     std::shared_ptr<SubsonicProvider> m_provider;
     std::set<QString> m_pendingPlaylistSyncs;
-    //! Mirrored playlists edited locally and not yet sent to the server.
-    std::set<QString> m_dirtyPlaylists;
+    //! Mirrored playlists edited locally and not yet saved on the server, with a count of their edits.
+    std::map<QString, int> m_dirtyPlaylists;
+    //! Mirrored playlists being sent to the server.
+    std::set<QString> m_pushingPlaylists;
+    //! Mirrored playlists removed locally and not yet deleted on the server.
+    std::set<QString> m_pendingDeletes;
     QTimer m_pushTimer;
     //! Playlists being created on the server.
     std::set<UId> m_uploadingPlaylists;

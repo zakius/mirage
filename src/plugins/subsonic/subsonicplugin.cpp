@@ -41,6 +41,9 @@ using namespace Qt::StringLiterals;
 using namespace std::chrono_literals;
 
 constexpr auto PlaylistProperty = "SubsonicPlaylist";
+//! Set while a mirrored playlist has edits the server has not saved, so they survive a restart.
+constexpr auto UnsavedProperty = "SubsonicUnsaved";
+constexpr int NotFoundCode     = 70;
 
 namespace {
 QString playlistKey(const Fooyin::Playlist* playlist)
@@ -121,12 +124,21 @@ void SubsonicPlugin::initialise(const CorePluginContext& context)
                          if(type != ScanRequest::Library || cancelled) {
                              return;
                          }
+                         for(const Playlist* playlist : m_playlistHandler->playlists()) {
+                             if(playlist->hasExtraProperty(QString::fromLatin1(UnsavedProperty))) {
+                                 m_dirtyPlaylists.try_emplace(playlistKey(playlist), 0);
+                             }
+                         }
                          for(const QString& libraryPath : std::exchange(m_pendingPlaylistSyncs, {})) {
                              syncPlaylists(libraryPath);
                          }
                          // Playlists made before a server was added, or whose upload failed
                          for(Playlist* playlist : m_playlistHandler->playlists()) {
                              uploadPlaylist(playlist);
+                         }
+                         // Edits whose push failed
+                         if(!m_dirtyPlaylists.empty()) {
+                             m_pushTimer.start();
                          }
                      });
 }
@@ -181,13 +193,14 @@ void SubsonicPlugin::writeStats(const TrackList& tracks, Track::Stats stats)
     }
 }
 
-void SubsonicPlugin::playlistEdited(const Playlist* playlist)
+void SubsonicPlugin::playlistEdited(Playlist* playlist)
 {
     if(m_applyingServerChanges || !playlist) {
         return;
     }
     if(const QString key = playlistKey(playlist); m_provider->isProviderPath(key)) {
-        m_dirtyPlaylists.emplace(key);
+        ++m_dirtyPlaylists[key];
+        playlist->setExtraProperty(QString::fromLatin1(UnsavedProperty), u"1"_s);
         m_pushTimer.start();
     }
 }
@@ -203,12 +216,22 @@ void SubsonicPlugin::playlistRemoved(const Playlist* playlist)
         return;
     }
     m_dirtyPlaylists.erase(key);
+    m_pendingDeletes.emplace(key);
+    deletePlaylist(key);
+}
 
+void SubsonicPlugin::deletePlaylist(const QString& key)
+{
     QUrlQuery params;
     params.addQueryItem(u"id"_s, key.sliced(key.lastIndexOf('/'_L1) + 1));
-    m_provider->call(key, u"deletePlaylist"_s, params, [](std::optional<QJsonObject> response, ApiError error) {
-        logError(u"deletePlaylist"_s, response, error);
-    });
+    m_provider->call(key, u"deletePlaylist"_s, params,
+                     [this, key](std::optional<QJsonObject> response, ApiError error) {
+                         // Failed deletes are retried on the next sync
+                         if(response || error.code == NotFoundCode) {
+                             m_pendingDeletes.erase(key);
+                         }
+                         logError(u"deletePlaylist"_s, response, error);
+                     });
 }
 
 std::optional<QString> SubsonicPlugin::defaultServer() const
@@ -289,17 +312,24 @@ void SubsonicPlugin::linkPlaylist(const UId& id, const QString& server, const QS
     playlist->setExtraProperty(QString::fromLatin1(PlaylistProperty), key);
 
     // Send edits made while the playlist was being created
-    m_dirtyPlaylists.emplace(key);
+    ++m_dirtyPlaylists[key];
+    playlist->setExtraProperty(QString::fromLatin1(UnsavedProperty), u"1"_s);
     m_pushTimer.start();
 }
 
 void SubsonicPlugin::pushPlaylists()
 {
-    for(const QString& key : std::exchange(m_dirtyPlaylists, {})) {
-        const auto playlists = m_playlistHandler->playlists();
+    const auto playlists = m_playlistHandler->playlists();
+
+    for(const auto& [key, edits] : std::map{m_dirtyPlaylists}) {
+        // One push per playlist at a time, so the server cannot apply them out of order
+        if(m_pushingPlaylists.contains(key)) {
+            continue;
+        }
         const auto it = std::ranges::find_if(playlists,
                                              [&key](const Playlist* playlist) { return playlistKey(playlist) == key; });
         if(it == playlists.cend()) {
+            m_dirtyPlaylists.erase(key);
             continue;
         }
 
@@ -314,16 +344,40 @@ void SubsonicPlugin::pushPlaylists()
                 entries.addQueryItem(u"songId"_s, songId(track.filepath()));
             }
         }
-        m_provider->call(key, u"createPlaylist"_s, entries, [](std::optional<QJsonObject> response, ApiError error) {
-            logError(u"createPlaylist"_s, response, error);
-        });
-
         QUrlQuery rename;
         rename.addQueryItem(u"playlistId"_s, serverId);
         rename.addQueryItem(u"name"_s, (*it)->name());
-        m_provider->call(key, u"updatePlaylist"_s, rename, [](std::optional<QJsonObject> response, ApiError error) {
-            logError(u"updatePlaylist"_s, response, error);
-        });
+
+        // An edit stays dirty until the server has saved it, so a failed push is retried and syncs do not undo it
+        const auto finish = [this, key, edits](const QString& method, const std::optional<QJsonObject>& response,
+                                               const ApiError& error) {
+            m_pushingPlaylists.erase(key);
+            logError(method, response, error);
+            if(response && m_dirtyPlaylists.contains(key) && m_dirtyPlaylists.at(key) == edits) {
+                m_dirtyPlaylists.erase(key);
+                for(Playlist* playlist : m_playlistHandler->playlists()) {
+                    if(playlistKey(playlist) == key) {
+                        playlist->removeExtraProperty(QString::fromLatin1(UnsavedProperty));
+                    }
+                }
+            }
+            else if(response && m_dirtyPlaylists.contains(key)) {
+                m_pushTimer.start();
+            }
+        };
+
+        m_pushingPlaylists.emplace(key);
+        m_provider->call(key, u"createPlaylist"_s, entries,
+                         [this, key, rename, finish](std::optional<QJsonObject> response, ApiError error) {
+                             if(!response) {
+                                 finish(u"createPlaylist"_s, response, error);
+                                 return;
+                             }
+                             m_provider->call(key, u"updatePlaylist"_s, rename,
+                                              [finish](std::optional<QJsonObject> renamed, ApiError renameError) {
+                                                  finish(u"updatePlaylist"_s, renamed, renameError);
+                                              });
+                         });
     }
 }
 
@@ -342,6 +396,11 @@ void SubsonicPlugin::syncPlaylists(const QString& libraryPath)
             for(const auto& value : toArray(response->value("playlists"_L1).toObject().value("playlist"_L1))) {
                 const QString id = value.toObject().value("id"_L1).toString();
                 serverKeys.emplace(keyPrefix + id);
+
+                if(m_pendingDeletes.contains(keyPrefix + id)) {
+                    deletePlaylist(keyPrefix + id);
+                    continue;
+                }
 
                 QUrlQuery params;
                 params.addQueryItem(u"id"_s, id);
@@ -392,11 +451,29 @@ void SubsonicPlugin::syncPlaylists(const QString& libraryPath)
                                      if((*existing)->name() != name) {
                                          m_playlistHandler->renamePlaylist((*existing)->id(), name);
                                      }
-                                     if((*existing)->tracks() != tracks) {
-                                         m_playlistHandler->replacePlaylistTracks((*existing)->id(), tracks);
+                                     // Entries the server cannot hold, such as local files, keep their place
+                                     const QString songsPrefix = libraryPath + u"/song/"_s;
+                                     TrackList merged;
+                                     auto next = tracks.cbegin();
+                                     for(const Track& track : (*existing)->tracks()) {
+                                         if(!track.filepath().startsWith(songsPrefix)) {
+                                             merged.push_back(track);
+                                         }
+                                         else if(next != tracks.cend()) {
+                                             merged.push_back(*next++);
+                                         }
+                                     }
+                                     merged.insert(merged.end(), next, tracks.cend());
+
+                                     if((*existing)->tracks() != merged) {
+                                         m_playlistHandler->replacePlaylistTracks((*existing)->id(), merged);
                                      }
                                  });
             }
+
+            std::erase_if(m_pendingDeletes, [&keyPrefix, &serverKeys](const QString& key) {
+                return key.startsWith(keyPrefix) && !serverKeys.contains(key);
+            });
 
             // Server playlists are mirrored, so playlists deleted on the server are removed
             const QScopedValueRollback applying{m_applyingServerChanges, true};
