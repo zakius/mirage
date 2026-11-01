@@ -22,7 +22,7 @@
 #include <mutex>
 
 namespace Fooyin {
-bool LibraryProvider::reportsPlays() const
+bool LibraryProvider::reportsPlays(const Track& /*track*/) const
 {
     return false;
 }

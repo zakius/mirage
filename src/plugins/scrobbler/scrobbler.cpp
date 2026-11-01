@@ -117,7 +117,7 @@ ScrobblerService* Scrobbler::service(const QString& name) const
 bool Scrobbler::providerReportsPlays(const Track& track) const
 {
     const auto provider = m_libraryProviders ? m_libraryProviders->providerForPath(track.filepath()) : nullptr;
-    return provider && provider->reportsPlays();
+    return provider && provider->reportsPlays(track);
 }
 
 void Scrobbler::scrobble(const Track& track)

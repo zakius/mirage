@@ -64,8 +64,8 @@ public:
     /** Maps a provider URL, such as an artwork URL, to a fetchable HTTP(S) URL. Called from any thread. */
     [[nodiscard]] virtual QUrl resolveUrl(const QUrl& url) const = 0;
 
-    /** Returns @c true if the provider reports plays of its tracks itself, so client-side scrobblers skip them. */
-    [[nodiscard]] virtual bool reportsPlays() const;
+    /** Returns @c true if the provider reports plays of @p track itself, so client-side scrobblers skip it. */
+    [[nodiscard]] virtual bool reportsPlays(const Track& track) const;
 
     /*!
      * Searches @p library on its server for @p query, so a library search can show tracks the library does not hold.
