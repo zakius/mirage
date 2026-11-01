@@ -21,6 +21,9 @@
 
 #include "subsonicpage.h"
 #include "subsonicprovider.h"
+#include "subsonicuploaddialog.h"
+
+#include "../cdda/cddadiscripper.h"
 
 #include <core/coresettings.h>
 #include <core/library/librarymanager.h>
@@ -29,9 +32,23 @@
 #include <core/player/playercontroller.h>
 #include <core/playlist/playlisthandler.h>
 #include <core/scripting/displayname.h>
+#include <gui/guiconstants.h>
+#include <gui/plugins/guiplugincontext.h>
+#include <gui/trackselectioncontroller.h>
+#include <utils/actions/actioncontainer.h>
+#include <utils/actions/actionmanager.h>
+#include <utils/actions/command.h>
+#include <utils/fypaths.h>
+#include <utils/mirage.h>
 #include <utils/settings/settingsmanager.h>
+#include <utils/utils.h>
 
+#include <QAction>
 #include <QDateTime>
+#include <QDir>
+#include <QMainWindow>
+#include <QMenu>
+#include <QMessageBox>
 #include <QJsonArray>
 #include <QLoggingCategory>
 #include <QScopedValueRollback>
@@ -97,6 +114,11 @@ void SubsonicPlugin::initialise(const CorePluginContext& context)
     m_library         = context.library;
     m_playlistHandler = context.playlistHandler;
     m_settings        = context.settingsManager;
+    m_audioLoader     = context.audioLoader;
+    m_network         = context.networkAccess;
+
+    // Rips left by a crash; uploads in progress live only as long as their dialog
+    QDir{Utils::cachePath(u"uploads"_s)}.removeRecursively();
 
     m_settings->createSetting(QString::fromLatin1(NameDisplaySetting), 0);
     Scripting::setNameDisplay(static_cast<Scripting::NameDisplay>(m_settings->value(NameDisplaySetting).toInt()));
@@ -191,9 +213,130 @@ void SubsonicPlugin::initialise(const CorePluginContext& context)
                      });
 }
 
-void SubsonicPlugin::initialise(const GuiPluginContext& /*context*/)
+void SubsonicPlugin::initialise(const GuiPluginContext& context)
 {
     new SubsonicPage(m_provider.get(), m_libraryManager, m_library, m_settings, this);
+
+    auto* fileMenu = context.actionManager->actionContainer(Constants::Menus::File);
+
+    m_uploadAction = new QAction(tr("&Upload to Server…"), this);
+    m_uploadAction->setStatusTip(tr("Upload local files to a server that accepts uploads"));
+    auto* uploadCommand = context.actionManager->registerAction(m_uploadAction, "Subsonic.Upload");
+    uploadCommand->setCategories({tr("File")});
+    fileMenu->addAction(uploadCommand, Actions::Groups::One);
+    QObject::connect(m_uploadAction, &QAction::triggered, this, [this]() { showUpload(); });
+
+    m_ripAction = new QAction(tr("&Rip CD to Server…"), this);
+    m_ripAction->setStatusTip(tr("Rip an audio CD to FLAC and upload it to a server that accepts uploads"));
+    auto* ripCommand = context.actionManager->registerAction(m_ripAction, "Subsonic.RipCd");
+    ripCommand->setCategories({tr("File")});
+    fileMenu->addAction(ripCommand, Actions::Groups::One);
+    QObject::connect(m_ripAction, &QAction::triggered, this, [this]() { ripCd(); });
+
+    // The library's track menu offers both for the server of the selected tracks
+    const auto addServerAction = [this, &context](QAction* action, const char* id, const QString& title) {
+        context.trackSelection->registerTrackContextAction(
+            this, TrackContextMenuArea::Track, Constants::Menus::Context::TrackSelection, id, title,
+            [this, action, title](QMenu* menu, const TrackSelection& selection) {
+                const QString server = selectionServer(selection.tracks);
+                if(action->isVisible() && !server.isEmpty() && m_provider->canUpload(server)) {
+                    auto* entry = new QAction(title, menu);
+                    QObject::connect(entry, &QAction::triggered, this, [this, action, server]() {
+                        action == m_uploadAction ? showUpload(server) : ripCd(server);
+                    });
+                    menu->addAction(entry);
+                }
+            },
+            Constants::Menus::Context::Utilities);
+    };
+    addServerAction(m_uploadAction, "Subsonic.UploadToServer", tr("Upload to This Server…"));
+    addServerAction(m_ripAction, "Subsonic.RipCdToServer", tr("Rip CD to This Server…"));
+
+    // Uploads exist only for servers that offer them to this user, which is known once they have answered
+    updateUploadActions();
+    QObject::connect(m_provider.get(), &SubsonicProvider::serverInfoChanged, this,
+                     &SubsonicPlugin::updateUploadActions);
+    QObject::connect(m_libraryManager, &LibraryManager::libraryRemoved, this, &SubsonicPlugin::updateUploadActions);
+}
+
+QString SubsonicPlugin::selectionServer(const TrackList& tracks) const
+{
+    QString server;
+    for(const Track& track : tracks) {
+        const QString trackServer = m_provider->libraryPathFor(track.filepath());
+        if(trackServer.isEmpty() || (!server.isEmpty() && trackServer != server)) {
+            return {};
+        }
+        server = trackServer;
+    }
+    return server;
+}
+
+std::vector<UploadDialog::Server> SubsonicPlugin::uploadServers() const
+{
+    std::vector<UploadDialog::Server> servers;
+    for(const auto& [id, library] : m_libraryManager->allLibraries()) {
+        if(m_provider->isProviderPath(library.path) && m_provider->canUpload(library.path)) {
+            servers.push_back({.libraryPath = library.path, .name = library.name});
+        }
+    }
+    return servers;
+}
+
+void SubsonicPlugin::updateUploadActions()
+{
+    const bool canUpload = !uploadServers().empty();
+    m_uploadAction->setVisible(canUpload);
+    // The audio CD plugin, where it is built and enabled, rips the disc
+    m_ripAction->setVisible(canUpload && qobject_cast<Cdda::DiscRipper*>(Mirage::discRipper()));
+}
+
+UploadDialog* SubsonicPlugin::createUploadDialog(const QString& libraryPath)
+{
+    const auto servers = uploadServers();
+    if(servers.empty()) {
+        return nullptr;
+    }
+
+    auto* dialog = new UploadDialog(m_provider.get(), m_network, servers, libraryPath, Utils::getMainWindow());
+    dialog->setAttribute(Qt::WA_DeleteOnClose);
+    QObject::connect(dialog, &UploadDialog::uploaded, this, [this](const QString& server) {
+        for(const auto& [id, library] : m_libraryManager->allLibraries()) {
+            if(library.path == server) {
+                m_library->refresh(library);
+            }
+        }
+    });
+    return dialog;
+}
+
+void SubsonicPlugin::showUpload(const QString& libraryPath)
+{
+    if(auto* dialog = createUploadDialog(libraryPath)) {
+        dialog->setAudioLoader(m_audioLoader);
+        dialog->show();
+    }
+}
+
+void SubsonicPlugin::ripCd(const QString& libraryPath)
+{
+    auto* ripper = qobject_cast<Cdda::DiscRipper*>(Mirage::discRipper());
+    if(!ripper || uploadServers().empty()) {
+        return;
+    }
+
+    ripper->chooseDisc(Utils::getMainWindow(), [this, ripper, libraryPath](const TrackList& tracks, const QString& error) {
+        if(tracks.empty()) {
+            if(!error.isEmpty()) {
+                QMessageBox::information(Utils::getMainWindow(), tr("Rip CD to Server"), error);
+            }
+            return;
+        }
+        if(auto* dialog = createUploadDialog(libraryPath)) {
+            dialog->setDisc(ripper, tracks);
+            dialog->show();
+        }
+    });
 }
 
 void SubsonicPlugin::scrobble(const Track& track, bool submission)

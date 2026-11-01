@@ -19,6 +19,8 @@
 
 #pragma once
 
+#include "subsonicuploaddialog.h"
+
 #include <core/plugins/coreplugin.h>
 #include <core/plugins/plugin.h>
 #include <core/track.h>
@@ -30,7 +32,11 @@
 #include <map>
 #include <set>
 
+class QAction;
+
 namespace Fooyin {
+class AudioLoader;
+class NetworkAccessManager;
 class Playlist;
 }
 
@@ -50,7 +56,17 @@ public:
     void initialise(const CorePluginContext& context) override;
     void initialise(const GuiPluginContext& context) override;
 
+    //! Uploads local files to the server of @p libraryPath, or to one the user picks if it is empty.
+    void showUpload(const QString& libraryPath = {});
+    //! Rips an audio CD to the server of @p libraryPath, or to one the user picks if it is empty.
+    void ripCd(const QString& libraryPath = {});
+
 private:
+    //! Returns the library path of the server of all @p tracks, or an empty string if they are not on one server.
+    [[nodiscard]] QString selectionServer(const TrackList& tracks) const;
+    [[nodiscard]] std::vector<UploadDialog::Server> uploadServers() const;
+    void updateUploadActions();
+    UploadDialog* createUploadDialog(const QString& libraryPath);
     void scrobble(const Track& track, bool submission);
     void writeStats(const TrackList& tracks, Track::Stats stats);
     void syncPlaylists(const QString& libraryPath);
@@ -66,7 +82,11 @@ private:
     MusicLibrary* m_library{nullptr};
     PlaylistHandler* m_playlistHandler{nullptr};
     SettingsManager* m_settings{nullptr};
+    std::shared_ptr<AudioLoader> m_audioLoader;
+    std::shared_ptr<NetworkAccessManager> m_network;
     std::shared_ptr<SubsonicProvider> m_provider;
+    QAction* m_uploadAction{nullptr};
+    QAction* m_ripAction{nullptr};
     std::set<QString> m_pendingPlaylistSyncs;
     //! Mirrored playlists edited locally and not yet saved on the server, with a count of their edits.
     std::map<QString, int> m_dirtyPlaylists;
