@@ -116,6 +116,7 @@
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDialog>
+#include <QDragEnterEvent>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QGuiApplication>
@@ -123,9 +124,11 @@
 #include <QInputDialog>
 #include <QJsonArray>
 #include <QJsonObject>
+#include <QLibrary>
 #include <QLineEdit>
 #include <QLoggingCategory>
 #include <QMessageBox>
+#include <QMimeData>
 #include <QMimeDatabase>
 #include <QPixmapCache>
 #include <QPointer>
@@ -366,8 +369,15 @@ void GuiApplication::raise()
     m_mainWindow->raiseWindow();
 }
 
-void GuiApplication::openFiles(const QList<QUrl>& files)
+void GuiApplication::openFiles(const QList<QUrl>& urls)
 {
+    // mirage: plays Subsonic servers only, so local files are not opened
+    QList<QUrl> files;
+    std::ranges::remove_copy_if(urls, std::back_inserter(files), &QUrl::isLocalFile);
+    if(files.empty()) {
+        return;
+    }
+
     if(m_playlistController->playlistsHaveLoaded()) {
         openFilesNow(files);
         return;
@@ -647,6 +657,22 @@ CoverRepository* GuiApplication::coverRepository() const
 
 bool GuiApplication::eventFilter(QObject* watched, QEvent* event)
 {
+    // mirage: plays Subsonic servers only, so local files dragged in from other applications are refused. Drags
+    // that start inside mirage, and plugin packages for the plugins page, work as before.
+    if(event->type() == QEvent::DragEnter) {
+        const auto isLocalMedia = [](const QUrl& url) {
+            const QString file = url.toLocalFile();
+            return url.isLocalFile() && !file.endsWith(".fyplugin"_L1, Qt::CaseInsensitive)
+                && !file.endsWith(".zip"_L1, Qt::CaseInsensitive) && !QLibrary::isLibrary(file);
+        };
+        const auto* dragEvent = static_cast<QDragEnterEvent*>(event);
+        if(const auto* mimeData = dragEvent->mimeData(); !dragEvent->source() && mimeData
+                                                         && std::ranges::any_of(mimeData->urls(), isLocalMedia)) {
+            event->ignore();
+            return true;
+        }
+    }
+
     if(event->type() == QEvent::Polish) {
         if(auto* editor = qobject_cast<QWidget*>(watched); qobject_cast<QComboBox*>(editor)
                                                            || qobject_cast<QLineEdit*>(editor)
