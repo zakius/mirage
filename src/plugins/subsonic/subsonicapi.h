@@ -42,14 +42,6 @@ constexpr auto ArtistLatinTag      = "ARTISTLATIN";
 constexpr auto TrackArtistLatinTag = "TRACKARTISTLATIN";
 constexpr auto AlbumArtistLatinTag = "ALBUMARTISTLATIN";
 
-//! How names with a romanized form are shown.
-enum class NameDisplay : uint8_t
-{
-    Original = 0,
-    Romanized,
-    Both,
-};
-
 struct Account
 {
     QUrl url;
@@ -87,9 +79,6 @@ void request(QNetworkAccessManager* network, const Account& account, const QStri
  * Only fields stored in the database are set. Romanized names (`…Latin` fields) go to the `…LATIN` extra tags.
  */
 [[nodiscard]] Track songToTrack(const QJsonObject& song, const QString& libraryPath);
-
-//! Returns @p original as @p display asks; a missing romanized form shows the original.
-[[nodiscard]] QString displayName(const QString& original, const QString& latin, NameDisplay display);
 
 //! Returns getUser's `scrobblingEnabled`: whether the server scrobbles the user's plays itself, if it says.
 [[nodiscard]] std::optional<bool> serverScrobbles(const QJsonObject& getUserResponse);

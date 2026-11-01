@@ -28,7 +28,7 @@
 #include <core/library/musiclibrary.h>
 #include <core/player/playercontroller.h>
 #include <core/playlist/playlisthandler.h>
-#include <core/scripting/scriptregistry.h>
+#include <core/scripting/displayname.h>
 #include <utils/settings/settingsmanager.h>
 
 #include <QDateTime>
@@ -52,14 +52,6 @@ constexpr int NotAuthorizedCode = 50;
 constexpr int NotFoundCode      = 70;
 
 namespace {
-//! Read by script workers, so kept outside the settings.
-std::atomic<Fooyin::Subsonic::NameDisplay> nameDisplay{Fooyin::Subsonic::NameDisplay::Original};
-
-QString displayNameFunction(const QStringList& args)
-{
-    return Fooyin::Subsonic::displayName(args.value(0), args.value(1), nameDisplay.load());
-}
-
 bool hasLatinTag(const Fooyin::Track& track)
 {
     using namespace Fooyin::Subsonic;
@@ -107,9 +99,9 @@ void SubsonicPlugin::initialise(const CorePluginContext& context)
     m_settings        = context.settingsManager;
 
     m_settings->createSetting(QString::fromLatin1(NameDisplaySetting), 0);
-    nameDisplay = static_cast<NameDisplay>(m_settings->value(NameDisplaySetting).toInt());
+    Scripting::setNameDisplay(static_cast<Scripting::NameDisplay>(m_settings->value(NameDisplaySetting).toInt()));
     m_settings->subscribe(NameDisplaySetting, this, [this](const QVariant& value) {
-        nameDisplay = static_cast<NameDisplay>(value.toInt());
+        Scripting::setNameDisplay(static_cast<Scripting::NameDisplay>(value.toInt()));
         // Views show script results of these tracks, so they are told that their names changed
         TrackList tracks;
         std::ranges::copy_if(m_library->libraryTracks(), std::back_inserter(tracks), hasLatinTag);
@@ -117,15 +109,6 @@ void SubsonicPlugin::initialise(const CorePluginContext& context)
             m_library->updateTrackMetadata(tracks);
         }
     });
-    ScriptRegistry::instance().registerFunction(
-        {.name         = u"display_name"_s,
-         .invoker      = makeScriptFunctionInvoker<displayNameFunction>(),
-         .signature    = u"$display_name(original,romanized)"_s,
-         .category     = tr("Subsonic"),
-         .description  = tr("Shows a name as original, romanized or both, as set on the Subsonic settings page. "
-                            "Subsonic servers with the romanization extension send romanized names in %titlelatin%, "
-                            "%albumlatin%, %artistlatin%, %trackartistlatin% and %albumartistlatin%"),
-         .dependencies = {.unclassified = false}});
 
     m_provider = std::make_shared<SubsonicProvider>(context.networkAccess, context.dbPool);
     context.libraryProviders->addProvider(m_provider);

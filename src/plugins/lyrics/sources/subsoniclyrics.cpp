@@ -24,6 +24,7 @@
 #include <core/library/libraryprovider.h>
 #include <core/network/networkaccessmanager.h>
 #include <core/network/networkutils.h>
+#include <core/scripting/displayname.h>
 #include <utils/settings/settingsmanager.h>
 
 #include <QJsonArray>
@@ -139,10 +140,10 @@ void SubsonicLyrics::requestLyrics()
 
         auto layers = LyricsLayers::Main;
         if(extensions.romanization) {
-            const int display = settings()->value(NameDisplaySetting).toInt();
-            layers = display == 1 ? LyricsLayers::Pronunciation
-                   : display == 2 ? LyricsLayers::MainAndPronunciation
-                                  : LyricsLayers::Main;
+            const auto display = static_cast<Scripting::NameDisplay>(settings()->value(NameDisplaySetting).toInt());
+            layers = display == Scripting::NameDisplay::Romanized ? LyricsLayers::Pronunciation
+                   : display == Scripting::NameDisplay::Both      ? LyricsLayers::MainAndPronunciation
+                                                                  : LyricsLayers::Main;
         }
         // Servers that ignore `kinds` send every layer; the conversion picks the ones asked for
         if(layers != LyricsLayers::Main) {

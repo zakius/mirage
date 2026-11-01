@@ -23,6 +23,7 @@
 
 #include <core/library/librarymanager.h>
 #include <core/library/musiclibrary.h>
+#include <core/scripting/displayname.h>
 #include <utils/settings/settingsmanager.h>
 
 #include <QCheckBox>
@@ -105,9 +106,9 @@ SubsonicPageWidget::SubsonicPageWidget(SubsonicProvider* provider, LibraryManage
     m_scrobbleHint->setWordWrap(true);
     m_nameDisplayHint->setWordWrap(true);
 
-    m_nameDisplay->addItem(tr("Original"), static_cast<int>(NameDisplay::Original));
-    m_nameDisplay->addItem(tr("Romanized"), static_cast<int>(NameDisplay::Romanized));
-    m_nameDisplay->addItem(tr("Original and romanized"), static_cast<int>(NameDisplay::Both));
+    m_nameDisplay->addItem(tr("Original"), static_cast<int>(Scripting::NameDisplay::Original));
+    m_nameDisplay->addItem(tr("Romanized"), static_cast<int>(Scripting::NameDisplay::Romanized));
+    m_nameDisplay->addItem(tr("Original and romanized"), static_cast<int>(Scripting::NameDisplay::Both));
 
     auto* form = new QFormLayout();
     form->addRow(tr("Server") + u":"_s, m_server);
@@ -237,7 +238,8 @@ void SubsonicPageWidget::saveServer()
 
     Account account{.url      = QUrl::fromUserInput(m_url->text().trimmed()),
                     .username = m_username->text().trimmed(),
-                    .password = m_password->text()};
+                    .password = m_password->text(),
+                    .scrobble = {}};
     if(account.password.isEmpty() && existing) {
         account.password = existing->password;
     }

@@ -115,17 +115,4 @@ TEST(SubsonicApiTest, SongsWithoutRomanizationHaveNoExtraTags)
 
     EXPECT_TRUE(track.extraTags().empty());
 }
-
-TEST(SubsonicApiTest, DisplaysNamesAsChosen)
-{
-    using Subsonic::NameDisplay;
-
-    EXPECT_EQ(Subsonic::displayName(u"東京事変"_s, u"Tokyo Jihen"_s, NameDisplay::Original), u"東京事変"_s);
-    EXPECT_EQ(Subsonic::displayName(u"東京事変"_s, u"Tokyo Jihen"_s, NameDisplay::Romanized), u"Tokyo Jihen"_s);
-    EXPECT_EQ(Subsonic::displayName(u"東京事変"_s, u"Tokyo Jihen"_s, NameDisplay::Both), u"東京事変 (Tokyo Jihen)"_s);
-    // Names without a romanized form fall back to the original
-    EXPECT_EQ(Subsonic::displayName(u"Artist"_s, {}, NameDisplay::Romanized), u"Artist"_s);
-    EXPECT_EQ(Subsonic::displayName(u"Artist"_s, {}, NameDisplay::Both), u"Artist"_s);
-    EXPECT_EQ(Subsonic::displayName({}, u"Latin"_s, NameDisplay::Romanized), QString{});
-}
 } // namespace Fooyin::Testing

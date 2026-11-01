@@ -270,14 +270,6 @@ Track songToTrack(const QJsonObject& song, const QString& libraryPath)
     return track;
 }
 
-QString displayName(const QString& original, const QString& latin, NameDisplay display)
-{
-    if(original.isEmpty() || latin.isEmpty() || latin == original || display == NameDisplay::Original) {
-        return original;
-    }
-    return display == NameDisplay::Romanized ? latin : u"%1 (%2)"_s.arg(original, latin);
-}
-
 std::optional<bool> serverScrobbles(const QJsonObject& getUserResponse)
 {
     const QJsonValue enabled = getUserResponse.value("user"_L1).toObject().value("scrobblingEnabled"_L1);

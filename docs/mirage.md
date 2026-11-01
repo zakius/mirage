@@ -191,9 +191,11 @@ Subsonic API documentation.
   and syncs), sync, search and `getPlaylist` send `romanization=both`. The `…Latin` fields of songs become extra tags:
   `TITLELATIN`, `ALBUMLATIN`, `ARTISTLATIN` (from `artists[].nameLatin`, or `artistLatin`), `TRACKARTISTLATIN`
   (the artists that `%trackartist%` lists) and `ALBUMARTISTLATIN` (from `albumArtists[].nameLatin`, or
-  `displayAlbumArtistLatin`). They are set only where the server sends them. The script function
+  `displayAlbumArtistLatin`). They are set only where the server sends them. The core script function
   `$display_name(original,romanized)` shows a name as the Subsonic page's "Show names and lyrics" option says
-  (original, romanized, or "original (romanized)"); a missing romanized form shows the original. The default library
+  (original, romanized, or "original (romanized)"); a missing romanized form shows the original. It lives in core
+  (`core/scripting/displayname.h`), so the default views keep their names with the plugin disabled; the plugin owns
+  the option and passes it to `Scripting::setNameDisplay()`, and without the plugin the function shows the original. The default library
   tree groupings, playlist presets and window title use it (a `[mirage]` commit), for example
   `$display_name(%title%,%titlelatin%)`. Changing the option refreshes the library tracks that have romanized names.
   The option is disabled, with a hint, while no server lists the extension. Server playlist names, `displayComposer`
