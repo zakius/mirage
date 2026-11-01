@@ -529,8 +529,7 @@ void UploadDialog::send(UploadTags tags)
     QObject::connect(m_uploader, &Uploader::failed, this, &UploadDialog::uploadFailed);
     QObject::connect(m_uploader, &Uploader::committed, this, [this, server](const QJsonObject& album) {
         setState(State::Done);
-        setStatus(tr("“%1” was added to the server. It appears in the library once it has been refreshed.")
-                      .arg(album.value("name"_L1).toString()));
+        setStatus(tr("“%1” is on the server and is being added to the library.").arg(album.value("name"_L1).toString()));
         Q_EMIT uploaded(server);
     });
 
@@ -543,14 +542,13 @@ void UploadDialog::uploadFailed(const ApiError& error)
 {
     setState(State::Failed);
     if(isDuplicateError(error)) {
+        // Only Replace can get past this, so Retry is not offered
+        m_upload->hide();
         m_replace->show();
-        setStatus(tr("The server says that this album is already in the library (%1). Replace the server's copy "
-                     "with this upload, or close to cancel it.")
-                      .arg(error.message));
+        setStatus(tr("The server already has this album. Replace the server's copy with this upload, or cancel it."));
         return;
     }
-    setStatus(tr("The upload stopped: %1. Retry to continue where it stopped, or close to cancel it.")
-                  .arg(error.message));
+    setStatus(tr("The upload stopped: %1. Retry to continue where it stopped, or cancel it.").arg(error.message));
 }
 
 void UploadDialog::setState(State state)
