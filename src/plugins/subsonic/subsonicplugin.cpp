@@ -28,6 +28,7 @@
 #include <core/library/musiclibrary.h>
 #include <core/player/playercontroller.h>
 #include <core/playlist/playlisthandler.h>
+#include <core/scripting/scriptregistry.h>
 #include <utils/settings/settingsmanager.h>
 
 #include <QDateTime>
@@ -45,10 +46,28 @@ constexpr auto PlaylistProperty = "SubsonicPlaylist";
 constexpr auto UnsavedProperty = "SubsonicUnsaved";
 //! Set on mirrored playlists the server does not let this user change, such as another user's.
 constexpr auto ReadOnlyProperty = "SubsonicReadOnly";
+//! Setting holding a Subsonic::NameDisplay; the lyrics plugin reads it too.
+constexpr auto NameDisplaySetting = "Subsonic/NameDisplay";
 constexpr int NotAuthorizedCode = 50;
 constexpr int NotFoundCode      = 70;
 
 namespace {
+//! Read by script workers, so kept outside the settings.
+std::atomic<Fooyin::Subsonic::NameDisplay> nameDisplay{Fooyin::Subsonic::NameDisplay::Original};
+
+QString displayNameFunction(const QStringList& args)
+{
+    return Fooyin::Subsonic::displayName(args.value(0), args.value(1), nameDisplay.load());
+}
+
+bool hasLatinTag(const Fooyin::Track& track)
+{
+    using namespace Fooyin::Subsonic;
+    return std::ranges::any_of(std::array{TitleLatinTag, AlbumLatinTag, ArtistLatinTag, TrackArtistLatinTag,
+                                          AlbumArtistLatinTag},
+                               [&track](const char* tag) { return track.hasExtraTag(QString::fromLatin1(tag)); });
+}
+
 QString playlistKey(const Fooyin::Playlist* playlist)
 {
     return playlist->extraProperties().value(QString::fromLatin1(PlaylistProperty));
@@ -86,6 +105,27 @@ void SubsonicPlugin::initialise(const CorePluginContext& context)
     m_library         = context.library;
     m_playlistHandler = context.playlistHandler;
     m_settings        = context.settingsManager;
+
+    m_settings->createSetting(QString::fromLatin1(NameDisplaySetting), 0);
+    nameDisplay = static_cast<NameDisplay>(m_settings->value(NameDisplaySetting).toInt());
+    m_settings->subscribe(NameDisplaySetting, this, [this](const QVariant& value) {
+        nameDisplay = static_cast<NameDisplay>(value.toInt());
+        // Views show script results of these tracks, so they are told that their names changed
+        TrackList tracks;
+        std::ranges::copy_if(m_library->libraryTracks(), std::back_inserter(tracks), hasLatinTag);
+        if(!tracks.empty()) {
+            m_library->updateTrackMetadata(tracks);
+        }
+    });
+    ScriptRegistry::instance().registerFunction(
+        {.name         = u"display_name"_s,
+         .invoker      = makeScriptFunctionInvoker<displayNameFunction>(),
+         .signature    = u"$display_name(original,romanized)"_s,
+         .category     = tr("Subsonic"),
+         .description  = tr("Shows a name as original, romanized or both, as set on the Subsonic settings page. "
+                            "Subsonic servers with the romanization extension send romanized names in %titlelatin%, "
+                            "%albumlatin%, %artistlatin%, %trackartistlatin% and %albumartistlatin%"),
+         .dependencies = {.unclassified = false}});
 
     m_provider = std::make_shared<SubsonicProvider>(context.networkAccess, context.dbPool);
     context.libraryProviders->addProvider(m_provider);
@@ -444,6 +484,9 @@ void SubsonicPlugin::syncPlaylists(const QString& libraryPath)
 
                 QUrlQuery params;
                 params.addQueryItem(u"id"_s, id);
+                if(m_provider->hasRomanization(libraryPath)) {
+                    params.addQueryItem(u"romanization"_s, u"both"_s);
+                }
                 m_provider->call(libraryPath, u"getPlaylist"_s, params,
                                  [this, libraryPath, key = QString{keyPrefix + id}](
                                      std::optional<QJsonObject> playlistResponse, ApiError playlistError) {

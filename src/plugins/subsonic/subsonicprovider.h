@@ -28,6 +28,7 @@
 
 #include <map>
 #include <mutex>
+#include <set>
 
 namespace Fooyin {
 class NetworkAccessManager;
@@ -64,12 +65,15 @@ public:
     void removeAccount(const QString& libraryPath);
 
     /*!
-     * Asks the server of the library at @p libraryPath, using @p account, whether it scrobbles plays itself. Calls
-     * @p done when the answer has arrived; a failed request keeps what was known.
+     * Asks the server of the library at @p libraryPath, using @p account, whether it scrobbles plays itself and which
+     * OpenSubsonic extensions it has. Calls @p done when both answers have arrived; failed requests keep what was
+     * known.
      */
     void fetchServerInfo(const QString& libraryPath, const Account& account, std::function<void()> done = {});
     //! Returns whether the server of @p libraryPath scrobbles the user's plays itself, if it said so.
     [[nodiscard]] std::optional<bool> serverScrobbles(const QString& libraryPath) const;
+    //! True if the server owning @p path, a library or track path, has the `romanization` extension.
+    [[nodiscard]] bool hasRomanization(const QString& path) const;
 
     //! Calls @p method on the server owning @p path, a library, track or artwork path.
     void call(const QString& path, const QString& method, const QUrlQuery& params, ResponseCallback callback);
@@ -101,6 +105,8 @@ private:
     std::map<QString, Account> m_accounts;
     //! By library path, getUser's `scrobblingEnabled` where the server sent it.
     std::map<QString, bool> m_serverScrobbles;
+    //! Library paths whose servers have the `romanization` extension.
+    std::set<QString> m_romanization;
 };
 } // namespace Subsonic
 } // namespace Fooyin

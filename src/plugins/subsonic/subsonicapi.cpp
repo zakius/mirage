@@ -58,6 +58,30 @@ QStringList names(const QJsonValue& value)
     return result;
 }
 
+//! Returns the romanized names of a list of artists, keeping names without one, or nothing if none has one.
+QStringList latinNames(const QJsonValue& value)
+{
+    QStringList result;
+    bool romanized{false};
+    for(const auto& item : Fooyin::Subsonic::toArray(value)) {
+        const QJsonObject object = item.toObject();
+        const QString name       = object.value("name"_L1).toString();
+        const QString latin      = object.value("nameLatin"_L1).toString();
+        if(!name.isEmpty()) {
+            romanized |= !latin.isEmpty();
+            result.append(latin.isEmpty() ? name : latin);
+        }
+    }
+    return romanized ? result : QStringList{};
+}
+
+void setLatinTag(Fooyin::Track& track, const char* tag, const QStringList& values)
+{
+    if(!values.isEmpty() && !values.constFirst().isEmpty()) {
+        track.replaceExtraTag(QString::fromLatin1(tag), values);
+    }
+}
+
 QString codecForSuffix(const QString& suffix)
 {
     static const std::map<QString, QString> codecs{
@@ -154,17 +178,41 @@ Track songToTrack(const QJsonObject& song, const QString& libraryPath)
     track.setTitle(song.value("title"_L1).toString());
     track.setAlbum(song.value("album"_L1).toString());
 
+    setLatinTag(track, TitleLatinTag, {song.value("titleLatin"_L1).toString()});
+    setLatinTag(track, AlbumLatinTag, {song.value("albumLatin"_L1).toString()});
+
     QStringList artists = names(song.value("artists"_L1));
     if(artists.isEmpty() && song.contains("artist"_L1)) {
         artists.append(song.value("artist"_L1).toString());
+        setLatinTag(track, ArtistLatinTag, {song.value("artistLatin"_L1).toString()});
+    }
+    else {
+        setLatinTag(track, ArtistLatinTag, latinNames(song.value("artists"_L1)));
     }
     track.setArtists(artists);
 
     QStringList albumArtists = names(song.value("albumArtists"_L1));
     if(albumArtists.isEmpty() && song.contains("displayAlbumArtist"_L1)) {
         albumArtists.append(song.value("displayAlbumArtist"_L1).toString());
+        setLatinTag(track, AlbumArtistLatinTag, {song.value("displayAlbumArtistLatin"_L1).toString()});
+    }
+    else {
+        setLatinTag(track, AlbumArtistLatinTag, latinNames(song.value("albumArtists"_L1)));
     }
     track.setAlbumArtists(albumArtists);
+
+    if(const QStringList artistsLatin = track.extraTag(QString::fromLatin1(ArtistLatinTag));
+       !albumArtists.isEmpty() && artistsLatin.size() == artists.size()) {
+        QStringList trackArtistsLatin;
+        for(qsizetype i{0}; i < artists.size(); ++i) {
+            if(!albumArtists.contains(artists.at(i))) {
+                trackArtistsLatin.append(artistsLatin.at(i));
+            }
+        }
+        if(trackArtistsLatin != track.uniqueArtists()) {
+            setLatinTag(track, TrackArtistLatinTag, trackArtistsLatin);
+        }
+    }
 
     QStringList genres = names(song.value("genres"_L1));
     if(genres.isEmpty() && song.contains("genre"_L1)) {
@@ -220,6 +268,14 @@ Track songToTrack(const QJsonObject& song, const QString& libraryPath)
     }
 
     return track;
+}
+
+QString displayName(const QString& original, const QString& latin, NameDisplay display)
+{
+    if(original.isEmpty() || latin.isEmpty() || latin == original || display == NameDisplay::Original) {
+        return original;
+    }
+    return display == NameDisplay::Romanized ? latin : u"%1 (%2)"_s.arg(original, latin);
 }
 
 std::optional<bool> serverScrobbles(const QJsonObject& getUserResponse)

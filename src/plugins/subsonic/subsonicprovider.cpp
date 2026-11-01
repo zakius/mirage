@@ -57,6 +57,14 @@ std::vector<QString> accountFields()
     return {QString::fromLatin1(UrlField), QString::fromLatin1(UsernameField), QString::fromLatin1(PasswordField),
             QString::fromLatin1(ScrobbleField)};
 }
+
+//! Adds `romanization=both` for servers with the extension, so songs carry their romanized names next to the originals.
+void addRomanization(QUrlQuery& params, bool romanization)
+{
+    if(romanization) {
+        params.addQueryItem(u"romanization"_s, u"both"_s);
+    }
+}
 } // namespace
 
 namespace Fooyin::Subsonic {
@@ -67,6 +75,7 @@ struct SyncState
     LibraryProvider::FetchCallback callback;
     TrackList tracks;
     std::deque<QString> albumIds;
+    bool romanization{false};
 };
 
 SubsonicProvider::SubsonicProvider(std::shared_ptr<NetworkAccessManager> network, DbConnectionPoolPtr dbPool,
@@ -95,6 +104,7 @@ void SubsonicProvider::fetchTracks(const LibraryInfo& library, FetchCallback cal
     state->account     = *account;
     state->callback    = std::move(callback);
     fetchServerInfo(library.path, *account, [this, state]() {
+        state->romanization = hasRomanization(state->libraryPath);
         fetchSongs(state, 0);
     });
 }
@@ -112,6 +122,7 @@ void SubsonicProvider::searchTracks(const LibraryInfo& library, const QString& q
     params.addQueryItem(u"artistCount"_s, u"0"_s);
     params.addQueryItem(u"albumCount"_s, u"0"_s);
     params.addQueryItem(u"songCount"_s, QString::number(SearchSongCount));
+    addRomanization(params, hasRomanization(library.path));
 
     call(*account, u"search3"_s, params,
          [libraryPath = library.path, callback = std::move(callback)](std::optional<QJsonObject> response,
@@ -237,14 +248,19 @@ void SubsonicProvider::removeAccount(const QString& libraryPath)
     const std::scoped_lock lock{m_mutex};
     m_accounts.erase(libraryPath);
     m_serverScrobbles.erase(libraryPath);
+    m_romanization.erase(libraryPath);
 }
 
 void SubsonicProvider::fetchServerInfo(const QString& libraryPath, const Account& account, std::function<void()> done)
 {
-    auto finish = [this, libraryPath, done = std::move(done)]() {
-        Q_EMIT serverInfoChanged(libraryPath);
-        if(done) {
-            done();
+    // Both answers are awaited, so `done` runs once
+    auto pending = std::make_shared<int>(2);
+    auto finish  = [this, libraryPath, pending, done = std::move(done)]() {
+        if(--*pending == 0) {
+            Q_EMIT serverInfoChanged(libraryPath);
+            if(done) {
+                done();
+            }
         }
     };
 
@@ -262,6 +278,21 @@ void SubsonicProvider::fetchServerInfo(const QString& libraryPath, const Account
         }
         finish();
     });
+
+    call(account, u"getOpenSubsonicExtensions"_s, {},
+         [this, libraryPath, finish](std::optional<QJsonObject> response, ApiError error) {
+             // Servers without OpenSubsonic answer with an error, so only network errors keep what was known
+             if(response || error.code >= 0) {
+                 const std::scoped_lock lock{m_mutex};
+                 if(response && hasExtension(*response, u"romanization"_s, 1)) {
+                     m_romanization.emplace(libraryPath);
+                 }
+                 else {
+                     m_romanization.erase(libraryPath);
+                 }
+             }
+             finish();
+         });
 }
 
 std::optional<bool> SubsonicProvider::serverScrobbles(const QString& libraryPath) const
@@ -269,6 +300,13 @@ std::optional<bool> SubsonicProvider::serverScrobbles(const QString& libraryPath
     const std::scoped_lock lock{m_mutex};
     const auto it = m_serverScrobbles.find(libraryPath);
     return it != m_serverScrobbles.cend() ? std::optional{it->second} : std::nullopt;
+}
+
+bool SubsonicProvider::hasRomanization(const QString& path) const
+{
+    const QString libraryPath = libraryPathFor(path);
+    const std::scoped_lock lock{m_mutex};
+    return m_romanization.contains(libraryPath);
 }
 
 void SubsonicProvider::call(const QString& path, const QString& method, const QUrlQuery& params,
@@ -323,6 +361,7 @@ void SubsonicProvider::fetchSongs(const std::shared_ptr<SyncState>& state, int o
     params.addQueryItem(u"albumCount"_s, u"0"_s);
     params.addQueryItem(u"songCount"_s, QString::number(PageSize));
     params.addQueryItem(u"songOffset"_s, QString::number(offset));
+    addRomanization(params, state->romanization);
 
     call(state->account, u"search3"_s, params,
          [this, state, offset](std::optional<QJsonObject> response, ApiError error) {
@@ -394,6 +433,7 @@ void SubsonicProvider::fetchNextAlbum(const std::shared_ptr<SyncState>& state)
 
     QUrlQuery params;
     params.addQueryItem(u"id"_s, state->albumIds.front());
+    addRomanization(params, state->romanization);
     state->albumIds.pop_front();
 
     call(state->account, u"getAlbum"_s, params, [this, state](std::optional<QJsonObject> response, ApiError error) {
