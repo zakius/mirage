@@ -480,6 +480,11 @@ if(WIN32)
     include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/DeployQt.cmake")
     windeployqt(fooyin)
 
+    # mirage: the MSVC runtime goes beside the exe, so mirage runs on Windows without the VC++ redistributable
+    set(CMAKE_INSTALL_SYSTEM_RUNTIME_DESTINATION "${BIN_INSTALL_DIR}")
+    set(CMAKE_INSTALL_SYSTEM_RUNTIME_COMPONENT fooyin)
+    include(InstallRequiredSystemLibraries)
+
     if(qm_files)
         add_custom_command(
             TARGET fooyin
