@@ -481,6 +481,12 @@ bool PlaylistController::confirmPlaylistRemoval(std::span<const UId> playlistIds
     else {
         message.setText(tr("Remove %Ln playlist(s)?", nullptr, static_cast<int>(playlists.size())));
     }
+    // mirage: removing a playlist mirrored from a Subsonic server deletes it there too
+    if(std::ranges::any_of(playlists, [](const Playlist* playlist) {
+           return playlist->extraProperties().contains(u"SubsonicPlaylist"_s);
+       })) {
+        message.setInformativeText(tr("It is also deleted from the server."));
+    }
 
     auto* dontAskAgain = new QCheckBox(tr("Don’t ask again"), &message);
     message.setCheckBox(dontAskAgain);
