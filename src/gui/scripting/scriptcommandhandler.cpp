@@ -498,9 +498,13 @@ bool ScriptCommandHandler::canExecute(const QString& commandId, ScriptCommandTar
         return false;
     }
 
-    if(resolved->type == ScriptCommandAliasType::PlayingProperties
-       || resolved->type == ScriptCommandAliasType::PlayingFolder) {
+    if(resolved->type == ScriptCommandAliasType::PlayingProperties) {
         return m_playerController && m_playerController->currentTrack().isValid();
+    }
+    // mirage: server tracks have no folder to open
+    if(resolved->type == ScriptCommandAliasType::PlayingFolder) {
+        return m_playerController && m_playerController->currentTrack().isValid()
+            && !m_playerController->currentTrack().isDatabaseOnlyMetadata();
     }
 
     if(auto* command = m_actionManager->command(Id{resolved->id})) {

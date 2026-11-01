@@ -89,7 +89,7 @@ StatusWidgetPageWidget::StatusWidgetPageWidget(SettingsManager* settings)
     const auto addActions = [](QComboBox* box) {
         box->addItem(tr("None"), static_cast<int>(StatusAction::None));
         box->addItem(tr("Show track"), static_cast<int>(StatusAction::ShowTrack));
-        box->addItem(tr("Open containing folder"), static_cast<int>(StatusAction::OpenContainingFolder));
+        // mirage: server tracks have no containing folder, so "Open containing folder" is not offered
         box->addItem(tr("Open properties"), static_cast<int>(StatusAction::OpenProperties));
     };
     addActions(m_doubleClick);

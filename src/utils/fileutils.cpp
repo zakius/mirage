@@ -170,6 +170,10 @@ bool createDirectories(const QString& path)
 
 void openDirectory(const QString& dir)
 {
+    // mirage: server tracks have no folder, so their "folder" (a server URL) is never handed to the file manager
+    if(!QFileInfo{dir}.isDir()) {
+        return;
+    }
     QDesktopServices::openUrl(QUrl::fromLocalFile(dir));
 }
 

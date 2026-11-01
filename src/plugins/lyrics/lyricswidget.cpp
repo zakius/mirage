@@ -541,9 +541,11 @@ void LyricsWidget::contextMenuEvent(QContextMenuEvent* event)
     editLyrics->setStatusTip(tr("Open editor for the current lyrics"));
     QObject::connect(editLyrics, &QAction::triggered, this, [this]() { openEditor(m_currentLyrics); });
     editLyrics->setEnabled(!m_currentTrack.isInArchive());
+    // mirage: server tracks have no file or tags to save lyrics to
+    editLyrics->setVisible(!m_currentTrack.isDatabaseOnlyMetadata());
     menu->addAction(editLyrics);
 
-    if(m_currentLyrics.isValid()) {
+    if(m_currentLyrics.isValid() && !m_currentTrack.isDatabaseOnlyMetadata()) {
         auto* saveLyrics = new QAction(tr("Save lyrics"), menu);
         saveLyrics->setStatusTip(tr("Save lyrics using current settings"));
         QObject::connect(saveLyrics, &QAction::triggered, this,

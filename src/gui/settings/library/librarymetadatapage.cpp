@@ -86,6 +86,9 @@ LibraryMetadataPageWidget::LibraryMetadataPageWidget(SettingsManager* settings)
     mainLayout->addWidget(metadataGroup, row++, 0);
     mainLayout->addWidget(playbackStatsGroup, row++, 0);
     mainLayout->setRowStretch(row, 1);
+
+    // mirage: statistics live on the server, never in file tags
+    playbackStatsGroup->hide();
 }
 
 void LibraryMetadataPageWidget::load()

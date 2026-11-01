@@ -122,7 +122,7 @@ CoverWidgetConfigDialog::CoverWidgetConfigDialog(CoverWidget* coverWidget, QWidg
         box->addItem(tr("View full size"), static_cast<int>(CoverAction::ViewFullSize));
         box->addItem(tr("Next available artwork type"), static_cast<int>(CoverAction::NextArtworkType));
         box->addItem(tr("Show track"), static_cast<int>(CoverAction::ShowTrack));
-        box->addItem(tr("Open containing folder"), static_cast<int>(CoverAction::OpenContainingFolder));
+        // mirage: server tracks have no containing folder, so "Open containing folder" is not offered
         box->addItem(tr("Open properties"), static_cast<int>(CoverAction::OpenProperties));
     };
     addActions(m_doubleClick);

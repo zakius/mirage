@@ -153,7 +153,8 @@ void LyricsSaver::autoSaveLyrics(const Lyrics& lyrics, const Track& track)
 {
     clearAutoSaveTimer();
 
-    if(track.isInArchive()) {
+    // mirage: server tracks have no file or tags to save lyrics to
+    if(track.isInArchive() || track.isDatabaseOnlyMetadata()) {
         return;
     }
 
@@ -186,7 +187,8 @@ bool LyricsSaver::saveLyrics(const Lyrics& lyrics, const Track& track)
 {
     clearAutoSaveTimer();
 
-    if(track.isInArchive()) {
+    // mirage: server tracks have no file or tags to save lyrics to
+    if(track.isInArchive() || track.isDatabaseOnlyMetadata()) {
         return false;
     }
 
@@ -228,7 +230,7 @@ WriteRequest LyricsSaver::writeLyricsToTags(const TrackList& tracks)
 
 bool LyricsSaver::saveLyricsToFile(const Lyrics& lyrics, const Track& track)
 {
-    if(track.isInArchive()) {
+    if(track.isInArchive() || track.isDatabaseOnlyMetadata()) {
         return false;
     }
 
@@ -282,7 +284,7 @@ std::optional<Track> LyricsSaver::writeLyricsToTag(const Lyrics& lyrics, const T
 
 std::optional<Track> LyricsSaver::updateLyricsTag(const Lyrics& lyrics, const Track& track) const
 {
-    if(track.isInArchive()) {
+    if(track.isInArchive() || track.isDatabaseOnlyMetadata()) {
         return {};
     }
 

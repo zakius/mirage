@@ -617,6 +617,11 @@ void CoverWidget::contextMenuEvent(QContextMenuEvent* event)
         QObject::connect(remove, &QAction::triggered, this,
                          [this]() { Q_EMIT requestArtworkRemoval({m_track}, m_config.coverType); });
 
+        // mirage: server tracks have no files or tags to write or extract artwork to
+        for(auto* action : {search, quickSearch, extractFile, extractAs, remove}) {
+            action->setVisible(!m_track.isDatabaseOnlyMetadata());
+        }
+
         menu->addSeparator();
         menu->addAction(viewFullSize);
         menu->addSeparator();
