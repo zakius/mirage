@@ -38,6 +38,8 @@ env:
   BUILD_CCACHE: ON
   BUILD_PCH: OFF
   BUILD_TESTS: ON
+  # Signing runs only where SignPath is set up, so forks build unsigned packages
+  SIGNPATH_ENABLED: ${{ secrets.SIGNPATH_API_TOKEN != '' }}
 
 jobs:
   windows:
@@ -164,7 +166,7 @@ jobs:
           .\ci\windows-build.ps1
 
       - name: Upload unsigned binaries for SignPath
-        if: inputs.signing_policy_slug != '' && github.repository == 'fooyin/fooyin'
+        if: inputs.signing_policy_slug != '' && env.SIGNPATH_ENABLED == 'true'
         id: upload-unsigned-binaries
         uses: actions/upload-artifact@v7
         with:
@@ -174,7 +176,7 @@ jobs:
           retention-days: 1
 
       - name: Sign Windows binaries
-        if: inputs.signing_policy_slug != '' && github.repository == 'fooyin/fooyin'
+        if: inputs.signing_policy_slug != '' && env.SIGNPATH_ENABLED == 'true'
         uses: signpath/github-action-submit-signing-request@v3
         with:
           api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
@@ -188,7 +190,7 @@ jobs:
           output-artifact-directory: signpath-signed-binaries
 
       - name: Apply signed binaries
-        if: inputs.signing_policy_slug != '' && github.repository == 'fooyin/fooyin'
+        if: inputs.signing_policy_slug != '' && env.SIGNPATH_ENABLED == 'true'
         shell: pwsh
         run: |
           Copy-Item `
@@ -224,12 +226,12 @@ jobs:
         if: matrix.arch == 'amd64'
         uses: actions/upload-artifact@v7
         with:
-          name: sdk-windows-${{ matrix.arch }}
+          name: mirage-sdk-windows-${{ matrix.arch }}
           path: build-${{ matrix.cmake-preset }}/sdk/*.zip
           if-no-files-found: error
 
       - name: Upload unsigned installer for SignPath
-        if: inputs.signing_policy_slug != '' && github.repository == 'fooyin/fooyin'
+        if: inputs.signing_policy_slug != '' && env.SIGNPATH_ENABLED == 'true'
         id: upload-unsigned-installer
         uses: actions/upload-artifact@v7
         with:
@@ -239,7 +241,7 @@ jobs:
           retention-days: 1
 
       - name: Sign Windows installer
-        if: inputs.signing_policy_slug != '' && github.repository == 'fooyin/fooyin'
+        if: inputs.signing_policy_slug != '' && env.SIGNPATH_ENABLED == 'true'
         uses: signpath/github-action-submit-signing-request@v3
         with:
           api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
@@ -253,7 +255,7 @@ jobs:
           output-artifact-directory: signpath-signed-installer
 
       - name: Apply signed installer
-        if: inputs.signing_policy_slug != '' && github.repository == 'fooyin/fooyin'
+        if: inputs.signing_policy_slug != '' && env.SIGNPATH_ENABLED == 'true'
         shell: pwsh
         run: |
           Copy-Item -Path "signpath-signed-installer/*.exe" -Destination artifacts -Force
@@ -261,17 +263,19 @@ jobs:
       - name: Upload installer artifact
         uses: actions/upload-artifact@v7
         with:
-          name: windows-setup-${{ matrix.arch }}
+          name: mirage-windows-setup-${{ matrix.arch }}
           path: artifacts/*.exe
+          if-no-files-found: error
 
       - name: Upload portable artifact
         uses: actions/upload-artifact@v7
         with:
-          name: windows-portable-${{ matrix.arch }}
+          name: mirage-windows-portable-${{ matrix.arch }}
           path: artifacts/*.zip
+          if-no-files-found: error
 
       - name: Save ccache
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master' && steps.ccache-restore.outputs.cache-hit != 'true'
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/mirage') && steps.ccache-restore.outputs.cache-hit != 'true'
         uses: ./.github/actions/save-ccache
         with:
           path: ${{ github.workspace }}/.ccache

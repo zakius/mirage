@@ -1,0 +1,26 @@
+name: Build mirage
+
+on:
+  push:
+    branches:
+      - mirage
+    paths-ignore:
+      - '*.md'
+      - 'docs/**'
+      - 'data/translations/**'
+  workflow_dispatch:
+
+permissions:
+  actions: write # needed to remove superseded build caches
+  contents: read
+
+jobs:
+  linux:
+    name: Build Linux
+    uses: ./.github/workflows/build-linux.yml
+    secrets: inherit
+
+  windows:
+    name: Build Windows
+    uses: ./.github/workflows/build-windows.yml
+    secrets: inherit

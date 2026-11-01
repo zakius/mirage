@@ -16,6 +16,7 @@ on:
   push:
     branches-ignore:
       - update-translations
+      - mirage
     paths-ignore:
       - '*.md'
       - 'data/translations/**'
