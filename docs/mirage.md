@@ -196,8 +196,8 @@ Subsonic API documentation.
   (original, romanized, or "original (romanized)"); a missing romanized form shows the original. It lives in core
   (`core/scripting/displayname.h`), so the default views keep their names with the plugin disabled; the plugin owns
   the option and passes it to `Scripting::setNameDisplay()`, and without the plugin the function shows the original. The default library
-  tree groupings, playlist presets and window title use it (a `[mirage]` commit), for example
-  `$display_name(%title%,%titlelatin%)`. Changing the option refreshes the library tracks that have romanized names.
+  tree groupings, playlist presets and columns, and window title use it (`[mirage]` commits), for example
+  `$display_name(%title%,%titlelatin%)`. The default filters do not, because they split multi-value artists. Changing the option refreshes the library tracks that have romanized names.
   The option is disabled, with a hint, while no server lists the extension. Server playlist names, `displayComposer`
   and album and artist objects are not used, because the plugin does not show them.
 - **Ratings and stars.** On `tracksStatsChanged`: a rating change calls `setRating`, rounded to 1–5 stars, or 0 to
@@ -313,8 +313,16 @@ plays to a PulseAudio null sink. Fault cases used a proxy in front of oasis.
   back. An entry removed while the server is down, followed by a restart, reaches the server on the next start.
 - `cmake --install` puts nothing under a `fooyin` path.
 
-Not tested against a server yet (2026-11-01, unit tests only): per-account scrobbling and the `romanization`
-extension, which oasis is still implementing.
+Verified on 2026-11-01 against oasis master with the `romanization` extension, with a generated library of Japanese,
+Korean, Chinese and Latin tags and `.lrc` files:
+
+- The extension is detected and enables the display option. The library tree, playlist headers and columns and the
+  window title show original, romanized or "original (romanized)" names as set, and Latin names stay as they are.
+- Romanized lyrics: "Romanized" shows the `pronunciation` lines, "Original and romanized" each main line followed by
+  its romanization, both synced. oasis sends no `cueLine` yet, so word timing is covered by unit tests only.
+- The scrobbling hint and default follow `getUser`: "doesn't scrobble" and on for a user without Last.fm, "scrobbles"
+  and off for one with it.
+- With the Subsonic plugin disabled, the default views show the original names.
 
 Limits:
 
