@@ -235,6 +235,33 @@ Subsonic API documentation.
   the server moves.
 - **Errors.** API errors carry the Subsonic error code. Error messages never include request URLs, because those carry
   the authentication token.
+- **Upload and CD rip.** For servers listing the OpenSubsonic extension `upload` v1 (the spec is oasis's
+  `docs/upload-extension.md`) whose `getUser` gives the user `uploadRole`, both asked when an account loads, is saved
+  and syncs. On every other server the actions do not exist: File > "Upload to Server…" and "Rip CD to Server…" are
+  hidden while no server offers uploads, and the track menu of a server's tracks has "Upload to This Server…" and
+  "Rip CD to This Server…" only for such a server. The rip actions also need the audio CD plugin (Linux only).
+  - *Upload* opens a dialog: pick the server, add files or a folder (FLAC, Opus, MP3, M4A and Ogg; other files are
+    skipped with a note). This is the only place mirage reads local media. Their tags, read with fooyin's tag readers,
+    fill the album fields (album, album artist, year, genre) and a track table (disc, track, title, artist), which the
+    user edits. Several tracks need an album name, because the server files an upload without one as a single. Rows
+    need a title and a unique disc and track number.
+  - *Rip CD* asks the audio CD plugin for the inserted disc (a choice if there are several), then opens the same
+    dialog. It sends `lookupDisc` with the disc's MusicBrainz disc id and TOC and offers the releases found, best
+    first, or "Enter the tags myself". With a release chosen the fields show its tags read-only, and the server takes
+    the tags from MusicBrainz (`createUpload` with `releaseId` and `disc`). Upload rips each track to FLAC with fooyin's
+    converter into `<cache>/uploads/<uuid>`, verified with AccurateRip where the disc is known there (the result is
+    shown as in fooyin; a mismatch asks before uploading).
+  - Then `createUpload` (the release, or `tags` JSON), `uploadTrack` for each slot the server expects in 4 MiB chunks
+    with progress, and `commitUpload`. A chunk that fails on the network is resumed from what `getUpload` reports, three
+    times in a row at most. Other errors stop the upload and show the server's message, with Retry, which reads
+    `getUpload` first (the server drops a file that fails its format check) and continues. Only "already in the library"
+    offers Replace (`replace=true`) instead. Cancel, or closing the dialog, sends `cancelUpload`. The rip folder is
+    deleted after the commit or cancel, and leftovers of a crash at the next start. After the commit the server's
+    library is refreshed, so the album appears.
+  - The audio CD plugin offers this through `Cdda::DiscRipper` (`plugins/cdda/cddadiscripper.h`), registered with
+    `Mirage::setDiscRipper()`, so neither plugin links the other. Its own actions (Open audio CD, the rip dialog)
+    stay hidden by the gate, and so does the converter's menu. `ConversionService::startJob()` (`[gui]`) runs the FLAC
+    job without a stored preset.
 - **Refresh.** The plugin syncs its libraries once tracks have loaded at startup, because server content changes
   without local file changes. When fooyin's own "auto refresh" is on, that refresh covers it instead. "Scan for
   changes" and the library settings page also sync.
@@ -273,9 +300,11 @@ code stays, so rebasing on fooyin stays cheap and a feature comes back by removi
   work as in fooyin, and plugin packages can still be dropped onto the plugins page.
 - **Plugins off by default.** File Operations, the ReplayGain scanner and Run Services are in the default
   `Plugins/Disabled` list and can be turned on in Settings > Plugins. The tag editor, quick tagger and cdda plugins
-  stay loaded for the planned CD upload (see "Backlog"); their actions are hidden by the gate.
+  stay loaded; their actions are hidden by the gate. The cdda plugin serves "Rip CD to Server…" (see "Upload and CD
+  rip").
 - **Folder libraries from older builds** stay in the database. `Application` calls
   `LibraryManager::setProvidersOnly(true)`, which hides them and their tracks; they are not scanned or monitored.
+- **Opened for uploads only:** reading local files' tags and ripping a CD, inside the upload dialog.
 - **Not hidden:** Add stream URL, waveform data (Utilities; it decodes the stream into mirage's own cache), layout,
   theme and preset import and export, the plugin installer, and the now-playing text output. Local tracks already in
   playlists from older builds stay and play.
@@ -289,7 +318,8 @@ code stays, so rebasing on fooyin stays cheap and a feature comes back by removi
   `share/mirage`, desktop file, metainfo and icons as `io.github.zakius.mirage`, so it installs next to fooyin), and
   Subsonic-only libraries (`LibraryManager` refuses folder
   paths; the library settings page hides folder settings and sends "Add" to the Subsonic page), and the `[mirage]`
-  commits that hide local media (see "Local media"). Rebase it when the API branch changes.
+  commits that hide local media (see "Local media"), a `[gui]` and a `[cdda]` commit for ripping a CD to a server, and
+  the `[ci]` workflow. Rebase it when the API branch changes.
 
 ## Order of work
 
@@ -310,6 +340,15 @@ code stays, so rebasing on fooyin stays cheap and a feature comes back by removi
    4. Playlist sync.
    5. End-to-end test against a real server (oasis with a generated library): library tree, search, playback, seeking,
       cover art, and play counts in `getSong`.
+
+## CI
+
+`.github/workflows/mirage.yml` builds Linux (upstream's Fedora, Debian and Ubuntu jobs) and Windows (amd64 and arm64)
+on every push to `mirage` and on demand, reusing upstream's `build-linux.yml` and `build-windows.yml`. Windows signing
+runs only where SignPath secrets exist, so the fork builds unsigned packages. The installer and portable zip are
+workflow artifacts (`mirage-windows-setup-<arch>`, `mirage-windows-portable-<arch>`); nothing is published as a release.
+Upstream's `build.yml` and clang-format check skip the `mirage` branch; the others only run on release or by hand.
+The audio CD plugin is Linux only, so Windows has no "Rip CD to Server…".
 
 ## Keeping the fork rebased
 
@@ -389,6 +428,19 @@ Xvfb that plays to a PulseAudio null sink:
 - A local file passed to a second instance on the command line opens nothing.
 - Nothing is written next to the music or under a `subsonic:` path.
 
+Verified on 2026-11-01 against oasis master (`upload` v1) as an isolated instance with a temporary library, in an
+isolated profile on Xvfb:
+
+- Without a server, File has no upload actions; with the server they appear, and the track menu of its album has the
+  "This Server" entries. "Open audio CD" stays hidden.
+- Uploading a generated three-track FLAC album from a folder: tags read from the files, one title edited in the table,
+  uploaded and committed. The server filed the files under `Mirage Tester/2026 - Upload Live Check/` with the edited
+  title, and the album appeared in mirage's library.
+- Uploading it again: "already has this album" with Replace only; Replace replaced the server's tracks. A third time,
+  Cancel deleted the upload on the server.
+- "Rip CD to Server…" without a disc says that no audio CD was found. A real CD was not tested; the TOC to
+  `lookupDisc` mapping is a unit test, and oasis's `lookupDisc` answer for a published TOC parsed as expected.
+
 Limits:
 
 - New playlists go to the default server. Moving a playlist to another server is not supported.
@@ -401,21 +453,13 @@ Limits:
   searched again.
 - Changing the name display option rewrites the database rows of the affected tracks (with unchanged values), because
   that is how views learn that their names changed.
+- An upload resumes only within the dialog's lifetime; closing it cancels the upload.
+- Uploads are one album (or one single) at a time, and `uploadCover` is not used: the server's cover comes from the
+  release or the files.
+- The Windows build is not tested on Windows.
 - Playlists are read again only after a library sync (at start, or "Scan for changes"), so a playlist the server
   grows (oasis radio) lags until then.
 
 ## Backlog
 
-**CD ripping and album upload to the server (needs the server's `upload` extension).**
-
-- Only for servers listing an `upload` OpenSubsonic extension; hidden on every other server.
-- Flow: read the disc's TOC and MusicBrainz disc id (the cdda plugin's `cddatoc.h` already computes it) →
-  `lookupDisc` (the server returns MusicBrainz release candidates) → `createUpload` with the chosen release or user
-  tags → `uploadTrack` per track as FLAC encoded locally (via the `formPost` extension), resumable → `commitUpload`
-  (the server tags, names, adds cover art, scans; nothing appears half-done).
-- The same flow uploads an existing file or album without a CD.
-- Later: AccurateRip verification.
-- Desktop only; caravan won't have it.
-
-The cdda plugin, the tag editor and the quick tagger stay in the build for this; the local media gate hides their
-actions until then.
+Nothing at the moment.
