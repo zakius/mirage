@@ -55,8 +55,8 @@ public:
     [[nodiscard]] virtual RemoteStreamSource createStreamSource(const QUrl& url) const = 0;
     //! Maps a provider URL (for example artwork) to a fetchable HTTP(S) URL. Called from any thread.
     [[nodiscard]] virtual QUrl resolveUrl(const QUrl& url) const = 0;
-    //! True if the provider reports plays to its own service, so client-side scrobblers skip its tracks.
-    [[nodiscard]] virtual bool reportsPlays() const;
+    //! True if the provider reports plays of `track` to its own service, so client-side scrobblers skip it.
+    [[nodiscard]] virtual bool reportsPlays(const Track& track) const;
     //! Searches the server for tracks the library may not hold. The default finds nothing.
     virtual void searchTracks(const LibraryInfo& library, const QString& query, FetchCallback callback);
 };
@@ -127,8 +127,9 @@ writes the server values over them. This is intended.
 
 ### Scrobbling
 
-The scrobbler plugin skips tracks whose provider returns `reportsPlays()`. The Subsonic server receives the plays and
-can forward them itself, so Last.fm does not count them twice.
+The scrobbler plugin skips tracks for which their provider's `reportsPlays(track)` returns `true`. The answer is per
+track, so a provider can decide per server whether its own service already forwards the plays (for example to
+Last.fm), and Last.fm does not count them twice.
 
 ### Server search
 
@@ -164,8 +165,13 @@ Subsonic API documentation.
   sends the whole file, which is read while it downloads; a seek past the downloaded part waits for it.
 - **Cover art.** `getCoverArt?id=<coverArt>`, through `resolveUrl()`.
 - **Plays.** On `PlayerController::currentTrackChanged`, `scrobble?id=..&submission=false` (now playing). On
-  `trackPlayed` (fooyin's "play counts" moment), `scrobble?id=..&submission=true&time=<ms>`. `reportsPlays()` returns
-  `true`.
+  `trackPlayed` (fooyin's "play counts" moment), `scrobble?id=..&submission=true&time=<ms>`. This is always sent.
+- **Client-side scrobbling.** Each account has the option "Also scrobble this server's plays with mirage's
+  scrobbler". It decides `reportsPlays(track)` for the server's tracks. Until the user sets it, it follows `getUser`'s
+  `scrobblingEnabled` for the signed-in user: off when the server scrobbles to Last.fm itself, on otherwise (also when
+  the server does not say). Only a choice that differs from that default is stored, in the account's `Scrobble` value
+  (`1` or `0`; empty follows the server). `getUser` is asked when an account loads, is saved and syncs; the page shows
+  what the server said.
 - **Search.** `searchTracks()` calls `search3` with the query, `songCount=50` and no artists or albums. Each song
   becomes a non-library track built like a synced one, so it plays, scrobbles and can be added to playlists. oasis
   returns YouTube Music songs after the library's matches, and these appear in the search; a server that returns only
@@ -176,7 +182,22 @@ Subsonic API documentation.
   lines. The request is signed by the provider: `resolveUrl()` maps `<library path>/rest/<method>?<params>` to an
   authenticated API URL. The server holds the track's own lyrics, so the source counts as local: it runs without
   fooyin's automatic search, after lyrics files and embedded tags (which win), before lyrics services, and its lyrics
-  are not saved back.
+  are not saved back. With the `romanization` extension and the display option set to romanized or both, it asks
+  `enhanced=true` and `kinds=pronunciation` or `kinds=main,pronunciation`, and shows the `pronunciation` entry, or each
+  of its lines after the matching `main` line. `cueLine` word timing becomes enhanced LRC word timestamps. Entries are
+  picked by `kind`, so a server that ignores `kinds` works too, and a song without a pronunciation entry shows its main
+  lyrics. A positive `offset` shows the lyrics sooner, as in LRC.
+- **Romanized names.** If `getOpenSubsonicExtensions` lists `romanization` v1 (asked when an account loads, is saved
+  and syncs), sync, search and `getPlaylist` send `romanization=both`. The `…Latin` fields of songs become extra tags:
+  `TITLELATIN`, `ALBUMLATIN`, `ARTISTLATIN` (from `artists[].nameLatin`, or `artistLatin`), `TRACKARTISTLATIN`
+  (the artists that `%trackartist%` lists) and `ALBUMARTISTLATIN` (from `albumArtists[].nameLatin`, or
+  `displayAlbumArtistLatin`). They are set only where the server sends them. The script function
+  `$display_name(original,romanized)` shows a name as the Subsonic page's "Show names and lyrics" option says
+  (original, romanized, or "original (romanized)"); a missing romanized form shows the original. The default library
+  tree groupings, playlist presets and window title use it (a `[mirage]` commit), for example
+  `$display_name(%title%,%titlelatin%)`. Changing the option refreshes the library tracks that have romanized names.
+  The option is disabled, with a hint, while no server lists the extension. Server playlist names, `displayComposer`
+  and album and artist objects are not used, because the plugin does not show them.
 - **Ratings and stars.** On `tracksStatsChanged`: a rating change calls `setRating`, rounded to 1–5 stars, or 0 to
   clear. A love change calls `star` or `unstar`.
 - **Playlists.** After each sync, `getPlaylists` and `getPlaylist` for each one. Each server playlist becomes a fooyin
@@ -290,6 +311,9 @@ plays to a PulseAudio null sink. Fault cases used a proxy in front of oasis.
   back. An entry removed while the server is down, followed by a restart, reaches the server on the next start.
 - `cmake --install` puts nothing under a `fooyin` path.
 
+Not tested against a server yet (2026-11-01, unit tests only): per-account scrobbling and the `romanization`
+extension, which oasis is still implementing.
+
 Limits:
 
 - New playlists go to the default server. Moving a playlist to another server is not supported.
@@ -298,5 +322,9 @@ Limits:
   sent.
 - A playlist removal that fails is forgotten on restart, and the playlist comes back on the next sync.
 - Playlist conflicts resolve by last write.
+- Lyrics already shown for the playing track keep their layers when the display option changes, until they are
+  searched again.
+- Changing the name display option rewrites the database rows of the affected tracks (with unchanged values), because
+  that is how views learn that their names changed.
 - Playlists are read again only after a library sync (at start, or "Scan for changes"), so a playlist the server
   grows (oasis radio) lags until then.
