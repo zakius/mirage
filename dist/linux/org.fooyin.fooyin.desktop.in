@@ -1,16 +1,13 @@
 [Desktop Entry]
-Name=fooyin
+Name=@FOOYIN_APP_NAME@
 Type=Application
-GenericName=fooyin Music Player
-Comment=Manage and play your local music collection
-Comment[cs]=Spravuj a přehrávej svou lokální hudební kolekci
-Comment[ru]=Организация и воспроизведение вашей локальной фонотеки
-Comment[sv]=Hantera och spela din lokala musiksamling
-Exec=fooyin %F
-TryExec=fooyin
-Icon=org.fooyin.fooyin
+GenericName=Music Player
+Comment=Play music from Subsonic servers
+Exec=@FOOYIN_APP_NAME@ %F
+TryExec=@FOOYIN_APP_NAME@
+Icon=@FOOYIN_APP_ID@
 Terminal=false
 Categories=AudioVideo;Player;Qt;Audio;
 MimeType=@FOOYIN_MIMETYPES@
 StartupNotify=false
-StartupWMClass=fooyin
+StartupWMClass=@FOOYIN_APP_NAME@

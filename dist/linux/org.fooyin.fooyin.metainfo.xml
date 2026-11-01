@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- Copyright 2022-2026 Luke Taylor -->
 <component type="desktop-application">
-    <id>org.fooyin.fooyin</id>
-    <launchable type="desktop-id">org.fooyin.fooyin.desktop</launchable>
+    <id>io.github.zakius.mirage</id>
+    <launchable type="desktop-id">io.github.zakius.mirage.desktop</launchable>
     <metadata_license>CC0-1.0</metadata_license>
     <project_license>GPL-3.0-or-later</project_license>
-    <name>fooyin</name>
+    <name>mirage</name>
     <summary>Play your music your way</summary>
     <developer id="org.fooyin.luketaylor">
         <name>Luke Taylor</name>

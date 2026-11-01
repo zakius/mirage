@@ -26,7 +26,7 @@ using namespace Qt::StringLiterals;
 
 constexpr auto FreedesktopDbusService = "org.freedesktop.Notifications";
 constexpr auto FreedesktopDbusPath    = "/org/freedesktop/Notifications";
-constexpr auto NotificationIconName   = "org.fooyin.fooyin";
+constexpr auto NotificationIconName   = "io.github.zakius.mirage";
 constexpr auto DefaultTimeoutMs       = 5000;
 
 namespace Fooyin::Notify {

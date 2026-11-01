@@ -49,13 +49,14 @@ elseif(UNIX)
     )
 
     install(
-        FILES "${CMAKE_BINARY_DIR}/dist/linux/org.fooyin.fooyin.desktop"
+        FILES "${CMAKE_BINARY_DIR}/dist/linux/${FOOYIN_APP_ID}.desktop"
         DESTINATION ${XDG_APPS_INSTALL_DIR}
         COMPONENT fooyin
     )
     install(
         FILES "${CMAKE_CURRENT_SOURCE_DIR}/dist/linux/org.fooyin.fooyin.metainfo.xml"
         DESTINATION ${APPDATA_INSTALL_DIR}
+        RENAME ${FOOYIN_APP_ID}.metainfo.xml
         COMPONENT fooyin
     )
 
@@ -74,7 +75,7 @@ elseif(UNIX)
         install(
             FILES ${ICON_SRC_PATH}/${SIZE}-fooyin.png
             DESTINATION ${ICON_INSTALL_DIR}/hicolor/${SIZE}x${SIZE}/apps
-            RENAME org.fooyin.fooyin.png
+            RENAME ${FOOYIN_APP_ID}.png
             COMPONENT fooyin
         )
     endforeach(SIZE)
@@ -82,7 +83,7 @@ elseif(UNIX)
     install(
         FILES ${ICON_SRC_PATH}/sc-fooyin.svg
         DESTINATION ${ICON_INSTALL_DIR}/hicolor/scalable/apps
-        RENAME org.fooyin.fooyin.svg
+        RENAME ${FOOYIN_APP_ID}.svg
         COMPONENT fooyin
     )
 

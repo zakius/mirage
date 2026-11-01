@@ -200,6 +200,10 @@ endif()
 
 include(GNUInstallDirs)
 
+# mirage: install under its own names so it can sit next to fooyin
+set(FOOYIN_APP_NAME mirage)
+set(FOOYIN_APP_ID io.github.zakius.mirage)
+
 set(DATAROOTDIR "${CMAKE_INSTALL_DATAROOTDIR}")
 fooyin_convert_to_relative_path(DATAROOTDIR)
 
@@ -210,8 +214,8 @@ if(APPLE)
     set(TRANSLATION_INSTALL_DIR "${FOOYIN_BUNDLE_NAME}/Contents/Resources/translations")
 elseif(INSTALL_FHS)
     set(BIN_INSTALL_DIR "${CMAKE_INSTALL_BINDIR}")
-    set(LIB_INSTALL_DIR "${CMAKE_INSTALL_LIBDIR}/fooyin")
-    set(TRANSLATION_INSTALL_DIR "${DATAROOTDIR}/fooyin/translations")
+    set(LIB_INSTALL_DIR "${CMAKE_INSTALL_LIBDIR}/${FOOYIN_APP_NAME}")
+    set(TRANSLATION_INSTALL_DIR "${DATAROOTDIR}/${FOOYIN_APP_NAME}/translations")
 else()
     set(BIN_INSTALL_DIR .)
     set(LIB_INSTALL_DIR .)
@@ -229,7 +233,7 @@ set(XDG_APPS_INSTALL_DIR "${DATAROOTDIR}/applications")
 set(APPDATA_INSTALL_DIR "${DATAROOTDIR}/metainfo")
 set(ICON_INSTALL_DIR "${DATAROOTDIR}/icons")
 
-set(DOC_INSTALL_DIR "${DATAROOTDIR}/doc/fooyin/")
+set(DOC_INSTALL_DIR "${DATAROOTDIR}/doc/${FOOYIN_APP_NAME}/")
 file(RELATIVE_PATH FOOYIN_RELATIVE_TRANSLATION_PATH "/${BIN_INSTALL_DIR}" "/${TRANSLATION_INSTALL_DIR}")
 
 if(APPLE)
@@ -343,7 +347,7 @@ list(REMOVE_DUPLICATES FOOYIN_MIMETYPES)
 
 configure_file(
     "${CMAKE_CURRENT_SOURCE_DIR}/dist/linux/org.fooyin.fooyin.desktop.in"
-    "${CMAKE_BINARY_DIR}/dist/linux/org.fooyin.fooyin.desktop"
+    "${CMAKE_BINARY_DIR}/dist/linux/${FOOYIN_APP_ID}.desktop"
     @ONLY
 )
 
@@ -415,6 +419,7 @@ if(APPLE)
     set_target_properties(fooyin PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${FOOYIN_OUTPUT_PREFIX}")
     target_include_directories(fooyin BEFORE PRIVATE "${FOOYIN_ICU_INCLUDE_DIR}")
 endif()
+set_target_properties(fooyin PROPERTIES OUTPUT_NAME ${FOOYIN_APP_NAME})
 fooyin_set_rpath(fooyin ${BIN_INSTALL_DIR})
 target_compile_features(fooyin PUBLIC ${FOOYIN_REQUIRED_CXX_FEATURES})
 target_compile_definitions(fooyin PRIVATE ${FOOYIN_COMPILE_DEFINITIONS})
