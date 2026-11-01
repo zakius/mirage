@@ -435,6 +435,11 @@ std::optional<UploadTags> UploadDialog::tagsFromForm()
         setStatus(tr("Add the files to upload first."));
         return {};
     }
+    // The server files an upload without an album as a single, named after its first track
+    if(tags.releaseId.isEmpty() && tags.album.isEmpty() && tags.tracks.size() > 1) {
+        setStatus(tr("Enter the album, or upload single tracks one at a time."));
+        return {};
+    }
     return tags;
 }
 
