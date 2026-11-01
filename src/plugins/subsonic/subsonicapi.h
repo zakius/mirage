@@ -76,7 +76,8 @@ void request(QNetworkAccessManager* network, const Account& account, const QStri
 
 /*!
  * Converts a Subsonic song to a track with the path `<libraryPath>/song/<id>`.
- * Only fields stored in the database are set. Romanized names (`…Latin` fields) go to the `…LATIN` extra tags.
+ * Only fields stored in the database are set. Fields without a track field (romanized names, sort name, moods, ISRC,
+ * contributor roles and others) go to extra tags, so the properties view shows everything the server sends.
  */
 [[nodiscard]] Track songToTrack(const QJsonObject& song, const QString& libraryPath);
 

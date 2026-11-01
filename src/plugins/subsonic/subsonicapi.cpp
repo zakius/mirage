@@ -30,6 +30,9 @@
 #include <QNetworkReply>
 #include <QRandomGenerator>
 
+#include <array>
+#include <map>
+
 using namespace Qt::StringLiterals;
 
 constexpr auto ClientName = "mirage";
@@ -79,6 +82,86 @@ void setLatinTag(Fooyin::Track& track, const char* tag, const QStringList& value
 {
     if(!values.isEmpty() && !values.constFirst().isEmpty()) {
         track.replaceExtraTag(QString::fromLatin1(tag), values);
+    }
+}
+
+//! Returns a song field as text: a string or non-zero number, or the strings, numbers and names of a list.
+QStringList texts(const QJsonValue& value)
+{
+    const auto text = [](const QJsonValue& item) {
+        if(item.isString()) {
+            return item.toString();
+        }
+        if(item.isDouble() && item.toDouble() != 0) {
+            return QString::number(item.toDouble());
+        }
+        return item.toObject().value("name"_L1).toString();
+    };
+
+    QStringList result;
+    for(const auto& item : value.isArray() ? value.toArray() : QJsonArray{value}) {
+        if(const QString itemText = text(item); !itemText.isEmpty()) {
+            result.append(itemText);
+        }
+    }
+    return result;
+}
+
+//! Song fields without a track field of their own, and the extra tags that keep them for the properties view.
+constexpr std::array<std::pair<const char*, const char*>, 14> ExtraTagFields{{
+    {"suffix", "SUFFIX"},
+    {"contentType", "CONTENTTYPE"},
+    {"path", "SERVERPATH"},
+    {"averageRating", "AVERAGERATING"},
+    {"sortName", "TITLESORT"},
+    {"displayArtist", "DISPLAYARTIST"},
+    {"displayAlbumArtist", "DISPLAYALBUMARTIST"},
+    {"moods", "MOOD"},
+    {"bpm", "BPM"},
+    {"musicBrainzId", "MUSICBRAINZ_TRACKID"},
+    {"isrc", "ISRC"},
+    {"explicitStatus", "EXPLICITSTATUS"},
+    {"works", "WORK"},
+    {"movements", "MOVEMENT"},
+}};
+
+//! Keeps contributors: composers and performers in their track fields, other roles in an extra tag per role.
+void setContributors(Fooyin::Track& track, const QJsonValue& contributors, const QString& displayComposer)
+{
+    QStringList composers;
+    QStringList performers;
+    std::map<QString, QStringList> roles;
+
+    for(const auto& item : Fooyin::Subsonic::toArray(contributors)) {
+        const QJsonObject contributor = item.toObject();
+        const QString role            = contributor.value("role"_L1).toString().toUpper();
+        const QString subRole         = contributor.value("subRole"_L1).toString();
+        QString name                  = contributor.value("artist"_L1).toObject().value("name"_L1).toString();
+        if(role.isEmpty() || name.isEmpty()) {
+            continue;
+        }
+        if(!subRole.isEmpty()) {
+            name += u" ("_s + subRole + u")"_s;
+        }
+
+        if(role == "COMPOSER"_L1) {
+            composers.append(name);
+        }
+        else if(role == "PERFORMER"_L1) {
+            performers.append(name);
+        }
+        else if(Fooyin::Track::isExtraTag(role)) {
+            roles[role].append(name);
+        }
+    }
+
+    if(composers.isEmpty() && !displayComposer.isEmpty()) {
+        composers.append(displayComposer);
+    }
+    track.setComposers(composers);
+    track.setPerformers(performers);
+    for(const auto& [role, names] : roles) {
+        track.replaceExtraTag(role, names);
     }
 }
 
@@ -219,6 +302,13 @@ Track songToTrack(const QJsonObject& song, const QString& libraryPath)
         genres.append(song.value("genre"_L1).toString());
     }
     track.setGenres(genres);
+    setContributors(track, song.value("contributors"_L1), song.value("displayComposer"_L1).toString());
+
+    for(const auto& [field, tag] : ExtraTagFields) {
+        if(const QStringList values = texts(song.value(QLatin1String{field})); !values.isEmpty()) {
+            track.replaceExtraTag(QString::fromLatin1(tag), values);
+        }
+    }
 
     if(const int number = song.value("track"_L1).toInt(); number > 0) {
         track.setTrackNumber(QString::number(number));
@@ -254,6 +344,13 @@ Track songToTrack(const QJsonObject& song, const QString& libraryPath)
     }
     if(replayGain.contains("albumPeak"_L1)) {
         track.setRGAlbumPeak(static_cast<float>(replayGain.value("albumPeak"_L1).toDouble()));
+    }
+    for(const auto& [field, tag] : {std::pair{"baseGain", "REPLAYGAIN_BASE_GAIN"},
+                                    std::pair{"fallbackGain", "REPLAYGAIN_FALLBACK_GAIN"}}) {
+        if(replayGain.contains(QLatin1String{field})) {
+            track.replaceExtraTag(QString::fromLatin1(tag),
+                                  {QString::number(replayGain.value(QLatin1String{field}).toDouble())});
+        }
     }
 
     track.setAddedTime(toMSecs(song.value("created"_L1)));

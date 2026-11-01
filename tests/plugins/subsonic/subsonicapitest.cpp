@@ -115,4 +115,46 @@ TEST(SubsonicApiTest, SongsWithoutRomanizationHaveNoExtraTags)
 
     EXPECT_TRUE(track.extraTags().empty());
 }
+
+TEST(SubsonicApiTest, KeepsEveryServerFieldForTheProperties)
+{
+    const Track track = Subsonic::songToTrack(response(R"({
+        "id": "s1", "title": "Song", "suffix": "flac", "contentType": "audio/flac", "path": "A/B/01.flac",
+        "averageRating": 4.5, "sortName": "Song, The", "displayArtist": "A feat. B", "displayAlbumArtist": "A",
+        "displayComposer": "C, D", "moods": ["calm", "warm"], "bpm": 120, "musicBrainzId": "mb-1",
+        "isrc": ["US1234567890"], "explicitStatus": "clean", "comment": "Note",
+        "contributors": [{"role": "composer", "artist": {"id": "c", "name": "C"}},
+                         {"role": "performer", "subRole": "piano", "artist": {"id": "p", "name": "P"}},
+                         {"role": "producer", "artist": {"id": "q", "name": "Q"}}],
+        "replayGain": {"trackGain": -6.5, "baseGain": 1, "fallbackGain": 0}})"),
+                                              u"subsonic://u@host"_s);
+
+    EXPECT_EQ(track.extraTag(u"SUFFIX"_s), QStringList{u"flac"_s});
+    EXPECT_EQ(track.extraTag(u"CONTENTTYPE"_s), QStringList{u"audio/flac"_s});
+    EXPECT_EQ(track.extraTag(u"SERVERPATH"_s), QStringList{u"A/B/01.flac"_s});
+    EXPECT_EQ(track.extraTag(u"AVERAGERATING"_s), QStringList{u"4.5"_s});
+    EXPECT_EQ(track.extraTag(u"TITLESORT"_s), QStringList{u"Song, The"_s});
+    EXPECT_EQ(track.extraTag(u"DISPLAYARTIST"_s), QStringList{u"A feat. B"_s});
+    EXPECT_EQ(track.extraTag(u"MOOD"_s), (QStringList{u"calm"_s, u"warm"_s}));
+    EXPECT_EQ(track.extraTag(u"BPM"_s), QStringList{u"120"_s});
+    EXPECT_EQ(track.extraTag(u"MUSICBRAINZ_TRACKID"_s), QStringList{u"mb-1"_s});
+    EXPECT_EQ(track.extraTag(u"ISRC"_s), QStringList{u"US1234567890"_s});
+    EXPECT_EQ(track.extraTag(u"EXPLICITSTATUS"_s), QStringList{u"clean"_s});
+    EXPECT_EQ(track.extraTag(u"PRODUCER"_s), QStringList{u"Q"_s});
+    EXPECT_EQ(track.extraTag(u"REPLAYGAIN_BASE_GAIN"_s), QStringList{u"1"_s});
+    EXPECT_EQ(track.extraTag(u"REPLAYGAIN_FALLBACK_GAIN"_s), QStringList{u"0"_s});
+    EXPECT_EQ(track.composers(), QStringList{u"C"_s});
+    EXPECT_EQ(track.performers(), QStringList{u"P (piano)"_s});
+    EXPECT_EQ(track.comment(), u"Note"_s);
+}
+
+TEST(SubsonicApiTest, OmitsFieldsTheServerLeavesOut)
+{
+    const Track track = Subsonic::songToTrack(
+        response(R"({"id": "s1", "title": "Song", "displayComposer": "C, D", "bpm": 0, "explicitStatus": ""})"),
+        u"subsonic://u@host"_s);
+
+    EXPECT_TRUE(track.extraTags().empty());
+    EXPECT_EQ(track.composers(), QStringList{u"C, D"_s});
+}
 } // namespace Fooyin::Testing
