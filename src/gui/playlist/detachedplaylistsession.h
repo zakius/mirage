@@ -21,6 +21,9 @@
 
 #include "playlistwidgetsession.h"
 
+#include <QPointer>
+#include <QTimer>
+
 namespace Fooyin {
 class DetachedSearchSession : public PlaylistWidgetSession
 {
@@ -67,6 +70,21 @@ public:
     [[nodiscard]] PlaylistAction::ActionOptions playbackOptions() const override;
 
     void setupConnections(PlaylistWidgetSessionHost& host) override;
+    void searchEvent(PlaylistWidgetSessionHost& host, const SearchRequest& request) override;
+
+protected:
+    void applySearchResults(PlaylistWidgetSessionHost& host, PlaylistTrackList tracks) override;
+
+private:
+    void showResults(PlaylistWidgetSessionHost& host);
+
+    //! Debounces server searches while the user types.
+    QPointer<QTimer> m_serverSearchTimer;
+    //! The query whose server results are held or pending.
+    QString m_serverQuery;
+    PlaylistTrackList m_serverTracks;
+    QString m_localQuery;
+    PlaylistTrackList m_localTracks;
 };
 
 class DetachedTrackListSession : public DetachedSearchSession

@@ -50,6 +50,7 @@ public:
 
     [[nodiscard]] QString scheme() const override;
     void fetchTracks(const LibraryInfo& library, FetchCallback callback) override;
+    void searchTracks(const LibraryInfo& library, const QString& query, FetchCallback callback) override;
     [[nodiscard]] RemoteStreamSource createStreamSource(const QUrl& url) const override;
     [[nodiscard]] QUrl resolveUrl(const QUrl& url) const override;
     [[nodiscard]] bool reportsPlays() const override;

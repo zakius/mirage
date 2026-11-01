@@ -66,6 +66,7 @@ public:
 
     [[nodiscard]] TrackList tracks() const override;
     [[nodiscard]] TrackList libraryTracks() const override;
+    void searchProviders(const QString& query, std::function<void(TrackList tracks)> callback) override;
     [[nodiscard]] Track trackForId(int id) const override;
     [[nodiscard]] TrackList tracksForIds(const TrackIds& ids) const override;
     [[nodiscard]] std::shared_ptr<TrackMetadataStore> metadataStore() const override;

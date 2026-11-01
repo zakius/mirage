@@ -49,6 +49,7 @@
 #include <QLoggingCategory>
 #include <QRegularExpression>
 #include <QSignalSpy>
+#include <QTest>
 #include <QSqlError>
 #include <QStandardPaths>
 #include <QTemporaryDir>
@@ -433,7 +434,15 @@ public:
         return url;
     }
 
+    void searchTracks(const Fooyin::LibraryInfo& /*library*/, const QString& query, FetchCallback callback) override
+    {
+        queries.push_back(query);
+        QTimer::singleShot(0, [tracks = searchResults, callback = std::move(callback)]() { callback(tracks); });
+    }
+
     std::optional<Fooyin::TrackList> tracks;
+    std::optional<Fooyin::TrackList> searchResults;
+    QStringList queries;
 };
 
 Fooyin::Track providerTrack(const QString& id, const QString& title)
@@ -631,6 +640,49 @@ TEST_F(UnifiedMusicLibraryTest, ProviderLibrarySyncStoresUpdatesAndRemovesTracks
     ASSERT_EQ(tracks.size(), 1);
     EXPECT_EQ(tracks.front().title(), u"One (Remastered)"_s);
     EXPECT_EQ(tracks.front().id(), storedTrack.id());
+}
+
+TEST_F(UnifiedMusicLibraryTest, ProviderSearchReturnsOnlyTracksOutsideTheLibrary)
+{
+    auto provider  = std::make_shared<FakeLibraryProvider>();
+    auto providers = std::make_shared<LibraryProviderRegistry>();
+    providers->addProvider(provider);
+    context().library.setLibraryProviders(providers);
+
+    const int libraryId = insertLibrary(context().dbPool, u"fake://server"_s, u"Server"_s);
+    ASSERT_GT(libraryId, 0);
+    context().libraryManager.reset();
+    const LibraryInfo libraryInfo = context().libraryManager.libraryInfo(libraryId).value_or(LibraryInfo{});
+
+    provider->tracks = TrackList{providerTrack(u"1"_s, u"One"_s)};
+    QSignalSpy summarySpy{&context().library, &MusicLibrary::scanSummary};
+    std::ignore = context().library.refresh(libraryInfo);
+    waitForSignal(summarySpy);
+    ASSERT_EQ(context().library.libraryTracks().size(), 1);
+
+    const auto search = [&](const QString& query) {
+        std::optional<TrackList> found;
+        context().library.searchProviders(query, [&found](TrackList tracks) { found = std::move(tracks); });
+        EXPECT_TRUE(QTest::qWaitFor([&found]() { return found.has_value(); }));
+        return found.value_or(TrackList{});
+    };
+
+    // A server that only finds library songs adds nothing
+    provider->searchResults = TrackList{providerTrack(u"1"_s, u"One"_s)};
+    EXPECT_TRUE(search(u"one"_s).empty());
+
+    // Songs the library already holds, and repeated songs, appear once
+    provider->searchResults = TrackList{providerTrack(u"1"_s, u"One"_s), providerTrack(u"yt-2"_s, u"Two"_s),
+                                        providerTrack(u"yt-2"_s, u"Two"_s), providerTrack(u"yt-3"_s, u"Three"_s)};
+    const TrackList found = search(u"lord huron"_s);
+    ASSERT_EQ(found.size(), 2);
+    EXPECT_EQ(found.at(0).filepath(), u"fake://server/song/yt-2"_s);
+    EXPECT_EQ(found.at(1).filepath(), u"fake://server/song/yt-3"_s);
+    EXPECT_EQ(provider->queries.back(), u"lord huron"_s);
+
+    // A failed search finds nothing
+    provider->searchResults.reset();
+    EXPECT_TRUE(search(u"lord huron"_s).empty());
 }
 
 TEST_F(UnifiedMusicLibraryTest, RemovingUnavailableTracksKeepsProviderTracks)

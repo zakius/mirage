@@ -28,6 +28,8 @@
 #include <QFuture>
 #include <QObject>
 
+#include <functional>
+
 namespace Fooyin {
 class MusicLibraryPrivate;
 class PendingTrackCoverProvider;
@@ -190,6 +192,11 @@ public:
     [[nodiscard]] virtual TrackList tracks() const = 0;
     /** Returns all tracks that belong to a music library. */
     [[nodiscard]] virtual TrackList libraryTracks() const = 0;
+    /*!
+     * Searches the servers of provider libraries for @p query. @p callback is called once on the main thread with the
+     * found tracks that tracks() does not hold. The default finds nothing.
+     */
+    virtual void searchProviders(const QString& query, std::function<void(TrackList tracks)> callback);
     /** Returns library tracks constrained by the active global library filter. */
     [[nodiscard]] TrackList visibleLibraryTracks() const;
     /** Returns @c true if one or more global library filters are active. */

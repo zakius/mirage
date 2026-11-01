@@ -153,6 +153,9 @@ public:
     void setFilteredTracks(PlaylistTrackList filteredTracks);
 
 protected:
+    //! Shows the local results of the current search.
+    virtual void applySearchResults(PlaylistWidgetSessionHost& host, PlaylistTrackList tracks);
+
     static TrackList getTracks(const QModelIndexList& indexes);
     static void getAllTrackIndexes(QAbstractItemModel* model, const QModelIndex& parent, QModelIndexList& indexList);
     static QModelIndexList filterSelectedIndexes(const QAbstractItemView* view);

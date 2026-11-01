@@ -34,6 +34,8 @@ using namespace Qt::StringLiterals;
 
 constexpr auto Scheme   = "subsonic";
 constexpr auto PageSize = 500;
+//! Songs asked for by a library search; servers such as oasis add songs the library does not hold.
+constexpr auto SearchSongCount = 50;
 //! Subsonic error code for a missing or empty required parameter.
 constexpr int MissingParameterCode = 10;
 
@@ -89,6 +91,39 @@ void SubsonicProvider::fetchTracks(const LibraryInfo& library, FetchCallback cal
     state->account     = *account;
     state->callback    = std::move(callback);
     fetchSongs(state, 0);
+}
+
+void SubsonicProvider::searchTracks(const LibraryInfo& library, const QString& query, FetchCallback callback)
+{
+    const auto account = accountForPath(library.path);
+    if(!account) {
+        callback({});
+        return;
+    }
+
+    QUrlQuery params;
+    params.addQueryItem(u"query"_s, query);
+    params.addQueryItem(u"artistCount"_s, u"0"_s);
+    params.addQueryItem(u"albumCount"_s, u"0"_s);
+    params.addQueryItem(u"songCount"_s, QString::number(SearchSongCount));
+
+    call(*account, u"search3"_s, params,
+         [libraryPath = library.path, callback = std::move(callback)](std::optional<QJsonObject> response,
+                                                                       const ApiError& error) {
+             if(!response) {
+                 qCWarning(SUBSONIC) << "Failed to search:" << error.message;
+                 callback({});
+                 return;
+             }
+
+             TrackList tracks;
+             for(const auto& song : toArray(response->value("searchResult3"_L1).toObject().value("song"_L1))) {
+                 Track track = songToTrack(song.toObject(), libraryPath);
+                 track.generateHash();
+                 tracks.push_back(track);
+             }
+             callback(tracks);
+         });
 }
 
 RemoteStreamSource SubsonicProvider::createStreamSource(const QUrl& url) const

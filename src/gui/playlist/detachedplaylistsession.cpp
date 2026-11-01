@@ -25,6 +25,12 @@
 #include <core/player/playercontroller.h>
 
 #include <ranges>
+#include <unordered_set>
+
+using namespace std::chrono_literals;
+
+constexpr auto ServerSearchDelay   = 400ms;
+constexpr int MinServerQueryLength = 3;
 
 namespace Fooyin {
 std::unique_ptr<PlaylistWidgetSession> PlaylistWidgetSession::createDetachedPlaylist()
@@ -188,6 +194,72 @@ void DetachedLibrarySession::setupConnections(PlaylistWidgetSessionHost& host)
     QObject::connect(library, &MusicLibrary::tracksUpdated, widget, refresh);
     QObject::connect(library, &MusicLibrary::tracksDeleted, widget, refresh);
     QObject::connect(library, &MusicLibrary::tracksSorted, widget, refresh);
+}
+
+void DetachedLibrarySession::searchEvent(PlaylistWidgetSessionHost& host, const SearchRequest& request)
+{
+    PlaylistWidgetSession::searchEvent(host, request);
+
+    // Library changes repeat the search; held or pending server results still apply
+    const QString query = request.text.trimmed();
+    if(query == m_serverQuery) {
+        return;
+    }
+    m_serverQuery = query;
+    m_serverTracks.clear();
+
+    if(!m_serverSearchTimer) {
+        m_serverSearchTimer = new QTimer(host.sessionWidget());
+        m_serverSearchTimer->setSingleShot(true);
+        m_serverSearchTimer->setInterval(ServerSearchDelay);
+        QObject::connect(m_serverSearchTimer, &QTimer::timeout, host.sessionWidget(), [this, hostPtr = &host]() {
+            const QPointer<QWidget> receiver{hostPtr->sessionWidget()};
+            hostPtr->musicLibrary()->searchProviders(
+                m_serverQuery, [this, hostPtr, receiver, query = m_serverQuery](const TrackList& tracks) {
+                    if(!receiver || query != m_serverQuery) {
+                        return;
+                    }
+                    m_serverTracks = PlaylistTrack::fromTracks(tracks, {});
+                    showResults(*hostPtr);
+                });
+        });
+    }
+
+    // Script queries such as "Recently played" mean nothing to a server
+    if(query.size() >= MinServerQueryLength && !query.contains(u'%')) {
+        m_serverSearchTimer->start();
+    }
+    else {
+        m_serverSearchTimer->stop();
+    }
+}
+
+void DetachedLibrarySession::applySearchResults(PlaylistWidgetSessionHost& host, PlaylistTrackList tracks)
+{
+    m_localQuery  = search();
+    m_localTracks = std::move(tracks);
+    showResults(host);
+}
+
+void DetachedLibrarySession::showResults(PlaylistWidgetSessionHost& host)
+{
+    // Server results wait for the local results of the same query, and follow them
+    if(m_localQuery != search()) {
+        return;
+    }
+
+    PlaylistTrackList tracks{m_localTracks};
+    if(m_serverQuery == search().trimmed()) {
+        // A sync may have added server results to the library since they arrived
+        std::unordered_set<QString> paths;
+        for(const auto& track : m_localTracks) {
+            paths.emplace(track.track.filepath());
+        }
+        std::ranges::copy_if(m_serverTracks, std::back_inserter(tracks),
+                             [&paths](const PlaylistTrack& track) { return !paths.contains(track.track.filepath()); });
+    }
+    setFilteredTracks(std::move(tracks));
+    host.resetModelThrottled();
 }
 
 DetachedTrackListSession::DetachedTrackListSession(const TrackList& tracks)

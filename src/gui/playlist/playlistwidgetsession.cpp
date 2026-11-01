@@ -238,8 +238,7 @@ void PlaylistWidgetSession::searchEvent(PlaylistWidgetSessionHost& host, const S
     const PlaylistTrackList sourceTracks = searchSourceTracks(host.playlistController(), host.musicLibrary());
 
     if(sourceTracks.empty()) {
-        setFilteredTracks({});
-        host.resetModelThrottled();
+        applySearchResults(host, {});
         return;
     }
 
@@ -255,9 +254,14 @@ void PlaylistWidgetSession::searchEvent(PlaylistWidgetSessionHost& host, const S
                       return;
                   }
 
-                  setFilteredTracks(filteredTracks);
-                  hostPtr->resetModelThrottled();
+                  applySearchResults(*hostPtr, filteredTracks);
               });
+}
+
+void PlaylistWidgetSession::applySearchResults(PlaylistWidgetSessionHost& host, PlaylistTrackList tracks)
+{
+    setFilteredTracks(std::move(tracks));
+    host.resetModelThrottled();
 }
 
 void PlaylistWidgetSession::handleSearchChanged(PlaylistWidgetSessionHost& /*host*/, const QString& /*search*/) { }

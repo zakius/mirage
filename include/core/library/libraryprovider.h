@@ -66,6 +66,12 @@ public:
 
     /** Returns @c true if the provider reports plays of its tracks itself, so client-side scrobblers skip them. */
     [[nodiscard]] virtual bool reportsPlays() const;
+
+    /*!
+     * Searches @p library on its server for @p query, so a library search can show tracks the library does not hold.
+     * Called on the main thread; @p callback must also be called on the main thread. The default finds nothing.
+     */
+    virtual void searchTracks(const LibraryInfo& library, const QString& query, FetchCallback callback);
 };
 
 /*!

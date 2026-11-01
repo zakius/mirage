@@ -27,6 +27,11 @@ bool LibraryProvider::reportsPlays() const
     return false;
 }
 
+void LibraryProvider::searchTracks(const LibraryInfo& /*library*/, const QString& /*query*/, FetchCallback callback)
+{
+    callback({});
+}
+
 void LibraryProviderRegistry::addProvider(const std::shared_ptr<LibraryProvider>& provider)
 {
     const std::unique_lock lock{m_mutex};

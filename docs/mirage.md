@@ -57,6 +57,8 @@ public:
     [[nodiscard]] virtual QUrl resolveUrl(const QUrl& url) const = 0;
     //! True if the provider reports plays to its own service, so client-side scrobblers skip its tracks.
     [[nodiscard]] virtual bool reportsPlays() const;
+    //! Searches the server for tracks the library may not hold. The default finds nothing.
+    virtual void searchTracks(const LibraryInfo& library, const QString& query, FetchCallback callback);
 };
 ```
 
@@ -128,6 +130,14 @@ writes the server values over them. This is intended.
 The scrobbler plugin skips tracks whose provider returns `reportsPlays()`. The Subsonic server receives the plays and
 can forward them itself, so Last.fm does not count them twice.
 
+### Server search
+
+`MusicLibrary::searchProviders()` asks every provider library's `searchTracks()` and returns the found tracks that the
+library does not hold (matched by path), once. The "Search Library" dialog (Library > Search, fooyin's library search
+that lists tracks) calls it for queries of three or more characters that are not scripts (no `%`), 400 ms after typing
+stops, and appends the results after the local matches. Results for an older query are dropped. The library tree and
+the filters show only library tracks, so they are not extended.
+
 ## Subsonic provider plugin (branch `mirage`, `src/plugins/subsonic`)
 
 foonic (iljasrb/foonic) has no license, so none of its code is reused. The client is written from scratch against the
@@ -156,6 +166,10 @@ Subsonic API documentation.
 - **Plays.** On `PlayerController::currentTrackChanged`, `scrobble?id=..&submission=false` (now playing). On
   `trackPlayed` (fooyin's "play counts" moment), `scrobble?id=..&submission=true&time=<ms>`. `reportsPlays()` returns
   `true`.
+- **Search.** `searchTracks()` calls `search3` with the query, `songCount=50` and no artists or albums. Each song
+  becomes a non-library track built like a synced one, so it plays, scrobbles and can be added to playlists. oasis
+  returns YouTube Music songs after the library's matches, and these appear in the search; a server that returns only
+  library songs adds nothing.
 - **Ratings and stars.** On `tracksStatsChanged`: a rating change calls `setRating`, rounded to 1–5 stars, or 0 to
   clear. A love change calls `star` or `unstar`.
 - **Playlists.** After each sync, `getPlaylists` and `getPlaylist` for each one. Each server playlist becomes a fooyin

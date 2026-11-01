@@ -72,6 +72,11 @@ public:
     uint64_t m_libraryFilterRevision{0};
 };
 
+void MusicLibrary::searchProviders(const QString& /*query*/, std::function<void(TrackList tracks)> callback)
+{
+    callback({});
+}
+
 MusicLibrary::MusicLibrary(QObject* parent)
     : QObject{parent}
     , p{std::make_unique<MusicLibraryPrivate>(this)}

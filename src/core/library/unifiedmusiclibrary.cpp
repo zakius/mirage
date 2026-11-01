@@ -27,6 +27,7 @@
 #include <core/coresettings.h>
 #include <core/engine/input/ratingtagpolicy.h>
 #include <core/library/libraryinfo.h>
+#include <core/library/libraryprovider.h>
 #include <core/library/tracksort.h>
 #include <core/network/remoteioservice.h>
 #include <core/trackmetadatastore.h>
@@ -280,6 +281,7 @@ public:
     std::shared_ptr<TrackMetadataStore> m_metadataStore;
 
     LibraryThreadHandler m_threadHandler;
+    std::shared_ptr<LibraryProviderRegistry> m_providers;
     QFuture<TrackList> m_sortFuture;
 
     TrackList m_tracks;
@@ -991,7 +993,49 @@ std::optional<LibraryInfo> UnifiedMusicLibrary::libraryForPath(const QString& pa
 
 void UnifiedMusicLibrary::setLibraryProviders(std::shared_ptr<LibraryProviderRegistry> providers)
 {
+    p->m_providers = providers;
     p->m_threadHandler.setLibraryProviders(std::move(providers));
+}
+
+void UnifiedMusicLibrary::searchProviders(const QString& query, std::function<void(TrackList tracks)> callback)
+{
+    struct Search
+    {
+        size_t pending{0};
+        TrackList tracks;
+        std::function<void(TrackList tracks)> callback;
+    };
+
+    std::vector<std::pair<std::shared_ptr<LibraryProvider>, LibraryInfo>> libraries;
+    for(const auto& library : p->m_libraryManager->allLibraries() | std::views::values) {
+        if(auto provider = p->m_providers ? p->m_providers->providerForPath(library.path) : nullptr) {
+            libraries.emplace_back(std::move(provider), library);
+        }
+    }
+    if(libraries.empty()) {
+        callback({});
+        return;
+    }
+
+    auto search = std::make_shared<Search>(libraries.size(), TrackList{}, std::move(callback));
+    for(const auto& [provider, library] : libraries) {
+        provider->searchTracks(library, query, [this, search](std::optional<TrackList> tracks) {
+            if(tracks) {
+                search->tracks.insert(search->tracks.end(), tracks->cbegin(), tracks->cend());
+            }
+            if(--search->pending > 0) {
+                return;
+            }
+            // Drops tracks the library holds and duplicates
+            std::unordered_set<QString> paths;
+            for(const Track& track : p->m_tracks) {
+                paths.emplace(track.filepath());
+            }
+            std::erase_if(search->tracks,
+                          [&paths](const Track& track) { return !paths.emplace(track.filepath()).second; });
+            search->callback(std::move(search->tracks));
+        });
+    }
 }
 
 void UnifiedMusicLibrary::loadAllTracks()
