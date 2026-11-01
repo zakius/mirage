@@ -14,14 +14,14 @@ cmake -S sdk-check/plugin -B sdk-check/build -G Ninja \
 cmake --build sdk-check/build
 cmake --install sdk-check/build --prefix "$PWD/sdk-check/relocated"
 
-ldd -r sdk-check/relocated/lib/fooyin/plugins/fyplugin_testbundleplugin.so > sdk-check/ldd.txt
+ldd -r sdk-check/relocated/lib/mirage/plugins/fyplugin_testbundleplugin.so > sdk-check/ldd.txt
 if grep -Eq 'not found|undefined symbol:' sdk-check/ldd.txt; then
   cat sdk-check/ldd.txt
   exit 1
 fi
 
 grep 'libfooyin_' sdk-check/ldd.txt
-for library in sdk-check/relocated/lib/fooyin/libfooyin_*.so; do
+for library in sdk-check/relocated/lib/mirage/libfooyin_*.so; do
   ldd -r "$library" > sdk-check/ldd.txt
   if grep -Eq 'not found|undefined symbol:' sdk-check/ldd.txt; then
     cat sdk-check/ldd.txt
