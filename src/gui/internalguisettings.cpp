@@ -189,7 +189,7 @@ GuiSettings::GuiSettings(SettingsManager* settingsManager)
     m_settings->createTempSetting<Settings::Gui::ResolvedAppStyle>(QVariant::fromValue(appStyle()));
 
     m_settings->createSetting<Internal::WindowTitleTrackScript>(
-        u"[$display_name(%albumartist%,%albumartistlatin%) - ]$display_name(%title%,%titlelatin%) \"[fooyin]\""_s,
+        u"[$display_name(%albumartist%,%albumartistlatin%) - ]$display_name(%title%,%titlelatin%) \"[mirage]\""_s,
         u"Interface/WindowTitleTrackScript"_s);
     m_settings->createSetting<Internal::TrackCoverPaths>(QVariant::fromValue(defaultCoverPaths()), u"Artwork/Paths"_s);
     m_settings->createSetting<Internal::TrackCoverSourcePreference>(

@@ -49,13 +49,15 @@ QString compilerVersion()
 
 QString copyright()
 {
-    return u"Copyright © 2022–2026, Luke Taylor. All rights reserved.<br/>"
+    return u"%1 is based on fooyin.<br/>"
+           "fooyin: Copyright © 2022–2026, Luke Taylor. All rights reserved.<br/>"
            "<br/>"
-           "%1 is free software released under GPL. The source code is available on %2<br/>"
+           "%1 is free software released under GPL. The source code is available on %2, and fooyin's on %3<br/>"
            "<br/>"
            "You should have received a copy of the GNU General Public License along with this program. If "
            "not, see "
-           "%3"_s.arg("fooyin"_L1, R"(<a href="https://github.com/fooyin/fooyin">GitHub</a>.)"_L1,
+           "%4"_s.arg("mirage"_L1, R"(<a href="https://github.com/zakius/mirage">GitHub</a>)"_L1,
+                      R"(<a href="https://github.com/fooyin/fooyin">GitHub</a>.)"_L1,
                       R"(<a href="http://www.gnu.org/licenses">http://www.gnu.org/licenses</a>.)"_L1);
 }
 
@@ -70,7 +72,7 @@ QString description()
     return u"<h3>%1</h3>"
            "Version: %2<br/>"
            "%3<br/>"
-           "<br/>"_s.arg("fooyin"_L1, QCoreApplication::applicationVersion(), qtVersion());
+           "<br/>"_s.arg("mirage"_L1, QCoreApplication::applicationVersion(), qtVersion());
 }
 } // namespace
 
@@ -79,7 +81,7 @@ AboutDialog::AboutDialog(QWidget* parent)
     : QDialog{parent}
     , m_icon{new QLabel(this)}
 {
-    setWindowTitle(tr("About fooyin"));
+    setWindowTitle(tr("About mirage"));
     auto* layout = new QGridLayout(this);
     layout->setSizeConstraint(QLayout::SetFixedSize);
 
