@@ -74,6 +74,7 @@ struct SyncState
     QString libraryPath;
     Account account;
     LibraryProvider::FetchCallback callback;
+    LibraryProvider::ProgressCallback progress;
     TrackList tracks;
     std::deque<QString> albumIds;
     //! Songs and albums listed so far, so a page that repeats them ends the listing.
@@ -94,7 +95,7 @@ QString SubsonicProvider::scheme() const
     return QString::fromLatin1(Scheme);
 }
 
-void SubsonicProvider::fetchTracks(const LibraryInfo& library, FetchCallback callback)
+void SubsonicProvider::fetchTracks(const LibraryInfo& library, FetchCallback callback, ProgressCallback progress)
 {
     const auto account = accountForPath(library.path);
     if(!account) {
@@ -107,6 +108,7 @@ void SubsonicProvider::fetchTracks(const LibraryInfo& library, FetchCallback cal
     state->libraryPath = library.path;
     state->account     = *account;
     state->callback    = std::move(callback);
+    state->progress    = std::move(progress);
     fetchServerInfo(library.path, *account, [this, state]() {
         state->romanization = hasRomanization(state->libraryPath);
         fetchSongs(state, 0);
@@ -450,6 +452,7 @@ void SubsonicProvider::fetchSongs(const std::shared_ptr<SyncState>& state, int o
              }
 
              if(added) {
+                 state->progress(static_cast<int>(state->tracks.size()));
                  fetchSongs(state, offset + static_cast<int>(songs.size()));
              }
              else if(state->tracks.empty()) {
@@ -517,6 +520,7 @@ void SubsonicProvider::fetchNextAlbum(const std::shared_ptr<SyncState>& state)
         for(const auto& song : toArray(response->value("album"_L1).toObject().value("song"_L1))) {
             state->tracks.push_back(songToTrack(song.toObject(), state->libraryPath));
         }
+        state->progress(static_cast<int>(state->tracks.size()));
         fetchNextAlbum(state);
     });
 }

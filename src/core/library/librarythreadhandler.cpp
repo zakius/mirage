@@ -298,29 +298,41 @@ void LibraryThreadHandlerPrivate::scanLibrary(const LibraryScanRequest& request)
 void LibraryThreadHandlerPrivate::syncProviderLibrary(const LibraryScanRequest& request, LibraryProvider& provider)
 {
     const int id = request.id;
-    provider.fetchTracks(request.library, [this, self = QPointer{m_self}, id](std::optional<TrackList> tracks) {
-        if(!self) {
-            return;
+    const auto reportFetched = [this, self = QPointer{m_self}, id](int fetched) {
+        if(self) {
+            updateProgress({.type    = ScanRequest::Library,
+                            .id      = id,
+                            .current = fetched,
+                            .phase   = ScanProgress::Phase::Downloading});
         }
-
-        const auto* current = this->request(id);
-        if(!current || id != m_currentRequestId) {
-            return;
-        }
-        if(!tracks || current->cancelled) {
-            if(!tracks) {
-                qCWarning(LIB_THREAD) << "Failed to fetch tracks of library" << current->library.name;
+    };
+    reportFetched(0);
+    provider.fetchTracks(
+        request.library,
+        [this, self = QPointer{m_self}, id](std::optional<TrackList> tracks) {
+            if(!self) {
+                return;
             }
-            finishScanRequest(id);
-            return;
-        }
 
-        QMetaObject::invokeMethod(&m_scanner,
-                                  [this, library = current->library, existingTracks = m_library->tracks(),
-                                   providerTracks = std::move(*tracks), id, token = m_scanner.prepareWork()]() {
-                                      m_scanner.syncLibrary(library, existingTracks, providerTracks, token, id);
-                                  });
-    });
+            const auto* current = this->request(id);
+            if(!current || id != m_currentRequestId) {
+                return;
+            }
+            if(!tracks || current->cancelled) {
+                if(!tracks) {
+                    qCWarning(LIB_THREAD) << "Failed to fetch tracks of library" << current->library.name;
+                }
+                finishScanRequest(id);
+                return;
+            }
+
+            QMetaObject::invokeMethod(&m_scanner,
+                                      [this, library = current->library, existingTracks = m_library->tracks(),
+                                       providerTracks = std::move(*tracks), id, token = m_scanner.prepareWork()]() {
+                                          m_scanner.syncLibrary(library, existingTracks, providerTracks, token, id);
+                                      });
+        },
+        reportFetched);
 }
 
 bool LibraryThreadHandlerPrivate::isProviderPath(const QString& path) const

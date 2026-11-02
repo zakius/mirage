@@ -46,6 +46,8 @@ class FYCORE_EXPORT LibraryProvider
 public:
     /** Receives the complete track list of a library, or std::nullopt if it could not be fetched. */
     using FetchCallback = std::function<void(std::optional<TrackList> tracks)>;
+    /** Receives the number of tracks fetched so far. */
+    using ProgressCallback = std::function<void(int fetched)>;
 
     virtual ~LibraryProvider() = default;
 
@@ -53,10 +55,11 @@ public:
     [[nodiscard]] virtual QString scheme() const = 0;
 
     /*!
-     * Fetches all tracks of @p library. Called on the main thread; @p callback must also be called on the main thread.
-     * Tracks should only set fields stored in the database, so that an unchanged track compares equal on the next sync.
+     * Fetches all tracks of @p library, calling @p progress as they arrive. Called on the main thread; @p callback and
+     * @p progress must also be called on the main thread. Tracks should only set fields stored in the database, so
+     * that an unchanged track compares equal on the next sync.
      */
-    virtual void fetchTracks(const LibraryInfo& library, FetchCallback callback) = 0;
+    virtual void fetchTracks(const LibraryInfo& library, FetchCallback callback, ProgressCallback progress) = 0;
 
     /** Opens the track at @p url for playback. Called from engine threads. */
     [[nodiscard]] virtual RemoteStreamSource createStreamSource(const QUrl& url) const = 0;

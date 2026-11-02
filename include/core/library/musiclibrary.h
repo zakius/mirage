@@ -78,6 +78,8 @@ struct ScanProgress
         WritingDatabase,
         Finalising,
         Finished,
+        //! A provider library's tracks are being fetched; current counts those fetched so far
+        Downloading,
     };
 
     ScanRequest::Type type;

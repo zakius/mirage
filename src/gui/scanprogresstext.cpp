@@ -77,6 +77,8 @@ QString phaseText(const ScanProgress& progress, const char* context)
             return translate(context, "saving changes");
         case ScanProgress::Phase::Finalising:
             return translate(context, "finalising");
+        case ScanProgress::Phase::Downloading:
+            return translate(context, "downloading %Ln track(s)", nullptr, progress.current);
         case ScanProgress::Phase::Finished:
             return {};
     }

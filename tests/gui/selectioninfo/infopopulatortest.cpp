@@ -41,7 +41,7 @@ InfoDataPtr populate(const TrackList& tracks)
     InfoPopulator populator;
     InfoDataPtr result;
     QObject::connect(&populator, &InfoPopulator::populated, [&result](const InfoDataPtr& data) { result = data; });
-    populator.run(InfoItem::Metadata, tracks, fields, {}, 1, populator.prepareWork());
+    populator.run(InfoItem::Options{InfoItem::Default}, tracks, fields, {}, 1, populator.prepareWork());
     return result;
 }
 

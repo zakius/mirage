@@ -419,8 +419,9 @@ public:
         return u"fake"_s;
     }
 
-    void fetchTracks(const Fooyin::LibraryInfo& /*library*/, FetchCallback callback) override
+    void fetchTracks(const Fooyin::LibraryInfo& /*library*/, FetchCallback callback, ProgressCallback progress) override
     {
+        progress(tracks ? static_cast<int>(tracks->size()) : 0);
         QTimer::singleShot(0, [tracks = tracks, callback = std::move(callback)]() { callback(tracks); });
     }
 

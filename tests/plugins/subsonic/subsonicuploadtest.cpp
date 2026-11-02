@@ -749,7 +749,7 @@ TEST(SubsonicUploadTagsTest, AcceptsTheSuffixesOfTheExtension)
 
 namespace {
 std::optional<TrackList> fetchAll(const std::shared_ptr<FakeServer>& server, const Subsonic::Account& account,
-                                  const QString& dbPath)
+                                  const QString& dbPath, std::vector<int>* fetched = nullptr)
 {
     DbConnection::DbParams params;
     params.type     = u"QSQLITE"_s;
@@ -765,7 +765,13 @@ std::optional<TrackList> fetchAll(const std::shared_ptr<FakeServer>& server, con
     EXPECT_TRUE(provider.saveAccount(library.path, account));
 
     std::optional<std::optional<TrackList>> result;
-    provider.fetchTracks(library, [&result](std::optional<TrackList> tracks) { result = std::move(tracks); });
+    provider.fetchTracks(
+        library, [&result](std::optional<TrackList> tracks) { result = std::move(tracks); },
+        [fetched](int count) {
+            if(fetched) {
+                fetched->push_back(count);
+            }
+        });
     EXPECT_TRUE(waitFor([&result]() { return result.has_value(); }));
     return result.value_or(std::nullopt);
 }
@@ -773,9 +779,14 @@ std::optional<TrackList> fetchAll(const std::shared_ptr<FakeServer>& server, con
 
 TEST_F(SubsonicUploadTest, FetchesEverySongFromAServerThatCapsPages)
 {
-    const auto tracks = fetchAll(m_server, m_account, m_dir.filePath(u"mirage.db"_s));
+    std::vector<int> fetched;
+    const auto tracks = fetchAll(m_server, m_account, m_dir.filePath(u"mirage.db"_s), &fetched);
     ASSERT_TRUE(tracks.has_value());
     EXPECT_EQ(250, tracks->size());
+    // Each page reports the songs fetched so far
+    ASSERT_FALSE(fetched.empty());
+    EXPECT_TRUE(std::ranges::is_sorted(fetched));
+    EXPECT_EQ(250, fetched.back());
 }
 
 TEST_F(SubsonicUploadTest, StopsListingWhenTheServerIgnoresTheOffset)
