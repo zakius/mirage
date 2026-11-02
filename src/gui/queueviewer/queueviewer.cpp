@@ -191,7 +191,8 @@ bool QueueViewer::isWindowWidget() const
 QueueViewer::ConfigData QueueViewer::factoryConfig() const
 {
     return {
-        .displayScript       = u"%title%$crlf()%album%<right>%duration%"_s,
+        .displayScript       = u"$display_name(%title%,%titlelatin%)$crlf()"
+                               "$display_name(%album%,%albumlatin%)<right>%duration%"_s,
         .showCurrent         = true,
         .showIcon            = true,
         .iconSize            = QSize{36, 36},

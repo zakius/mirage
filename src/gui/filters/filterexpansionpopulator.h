@@ -40,7 +40,8 @@ struct ExpansionScripts
     QString header{QStringLiteral("<sized=1><b>%filter_columns%</b></sized>")};
     QString groupBy;
     QString subheader;
-    QString track{QStringLiteral("[$if2(%playingicon%,[$num(%tracknumber%,2)])  ]%title%<right>%length%</right>")};
+    QString track{QStringLiteral(
+        "[$if2(%playingicon%,[$num(%tracknumber%,2)])  ]$display_name(%title%,%titlelatin%)<right>%length%</right>")};
     QString footer;
 
     bool operator==(const ExpansionScripts& other) const = default;

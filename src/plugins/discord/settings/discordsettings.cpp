@@ -30,9 +30,9 @@ DiscordSettings::DiscordSettings(SettingsManager* settingsManager)
     using namespace Settings::Discord;
 
     m_settings->createSetting<ClientId>(u"1252972125623685140"_s, u"Discord/ClientId"_s);
-    m_settings->createSetting<ArtistField>(u"%artist%"_s, u"Discord/ArtistField"_s);
-    m_settings->createSetting<AlbumField>(u"%album%"_s, u"Discord/AlbumField"_s);
-    m_settings->createSetting<TitleField>(u"%title%"_s, u"Discord/TitleField"_s);
+    m_settings->createSetting<ArtistField>(u"$display_name(%artist%,%artistlatin%)"_s, u"Discord/ArtistField"_s);
+    m_settings->createSetting<AlbumField>(u"$display_name(%album%,%albumlatin%)"_s, u"Discord/AlbumField"_s);
+    m_settings->createSetting<TitleField>(u"$display_name(%title%,%titlelatin%)"_s, u"Discord/TitleField"_s);
     m_settings->createSetting<ShowStateIcon>(true, u"Discord/ShowPlayStateIcon"_s);
     m_settings->createSetting<DiscordEnabled>(false, u"Discord/Enable"_s);
     m_settings->createSetting<ClearOnPause>(false, u"Discord/ClearOnPause"_s);

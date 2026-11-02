@@ -138,7 +138,8 @@ GuiSettings::GuiSettings(SettingsManager* settingsManager)
     m_settings->createSetting<PlaylistIntegratedSearch>(false, u"Playlist/IntegratedSearch"_s);
     m_settings->createSetting<PlaylistSearchMode>(static_cast<int>(PlaylistSearchController::Mode::MatchWordBeginnings),
                                                   u"Playlist/SearchMode"_s);
-    m_settings->createSetting<PlaylistSearchScript>(u"[%artist%] [%title%] [%album%]"_s, u"Playlist/SearchScript"_s);
+    m_settings->createSetting<PlaylistSearchScript>(
+        u"[%artist%] [%title%] [%album%] [%artistlatin%] [%titlelatin%] [%albumlatin%]"_s, u"Playlist/SearchScript"_s);
     m_settings->createSetting<ShowMenuBar>(true, u"Interface/ShowMenuBar"_s);
     m_settings->createSetting<MenuBarMovable>(false, u"Interface/MenuBarMovable"_s);
     m_settings->createSetting<ToolbarsLocked>(true, u"Interface/ToolbarsLocked"_s);
@@ -253,8 +254,9 @@ GuiSettings::GuiSettings(SettingsManager* settingsManager)
     m_settings->createSetting<Internal::PropertiesSidebarTrackScript>(u"[%track%. ]%title%"_s,
                                                                       u"Interface/PropertiesSidebarTrackScript "_s);
     m_settings->createSetting<Internal::NowPlayingOutputEnabled>(false, u"NowPlayingOutput/Enabled"_s);
-    m_settings->createSetting<Internal::NowPlayingOutputScript>(u"[%artist% - ]%title%"_s,
-                                                                u"NowPlayingOutput/Script"_s);
+    m_settings->createSetting<Internal::NowPlayingOutputScript>(
+        u"[$display_name(%artist%,%artistlatin%) - ]$display_name(%title%,%titlelatin%)"_s,
+        u"NowPlayingOutput/Script"_s);
     m_settings->createSetting<Internal::NowPlayingOutputUpdateEvents>(
         static_cast<int>(NowPlayingOutputService::DefaultEvents), u"NowPlayingOutput/UpdateEvents"_s);
     m_settings->createSetting<Internal::NowPlayingOutputTargets>(static_cast<int>(NowPlayingOutputService::NoOutput),

@@ -58,6 +58,7 @@
 #include <core/application.h>
 #include <core/corepaths.h>
 #include <core/coresettings.h>
+#include <core/scripting/displayname.h>
 #include <core/database/database.h>
 #include <core/engine/audioencoderregistry.h>
 #include <core/engine/enginehandler.h>
@@ -837,6 +838,7 @@ void GuiApplication::setupConnections()
     QObject::connect(m_playlistHandler, &PlaylistHandler::tracksRemoved, this, updateTitleForActivePlaylist);
 
     m_settings->subscribe<Settings::Gui::Internal::WindowTitleTrackScript>(this, &GuiApplication::updateWindowTitle);
+    m_settings->subscribe(Scripting::NameDisplaySetting, this, &GuiApplication::updateWindowTitle);
     m_settings->subscribe<Settings::Gui::RatingFullStarSymbol>(this, &GuiApplication::updateWindowTitle);
     m_settings->subscribe<Settings::Gui::RatingHalfStarSymbol>(this, &GuiApplication::updateWindowTitle);
     m_settings->subscribe<Settings::Gui::RatingEmptyStarSymbol>(this, &GuiApplication::updateWindowTitle);
