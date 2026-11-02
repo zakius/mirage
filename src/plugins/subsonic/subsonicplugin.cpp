@@ -44,6 +44,7 @@
 #include <utils/utils.h>
 
 #include <QAction>
+#include <QActionGroup>
 #include <QDateTime>
 #include <QDir>
 #include <QMainWindow>
@@ -63,8 +64,6 @@ constexpr auto PlaylistProperty = "SubsonicPlaylist";
 constexpr auto UnsavedProperty = "SubsonicUnsaved";
 //! Set on mirrored playlists the server does not let this user change, such as another user's.
 constexpr auto ReadOnlyProperty = "SubsonicReadOnly";
-//! Setting holding a Subsonic::NameDisplay; the lyrics plugin reads it too.
-constexpr auto NameDisplaySetting = "Subsonic/NameDisplay";
 constexpr int NotAuthorizedCode = 50;
 constexpr int NotFoundCode      = 70;
 
@@ -120,10 +119,7 @@ void SubsonicPlugin::initialise(const CorePluginContext& context)
     // Rips left by a crash; uploads in progress live only as long as their dialog
     QDir{Utils::cachePath(u"uploads"_s)}.removeRecursively();
 
-    m_settings->createSetting(QString::fromLatin1(NameDisplaySetting), 0);
-    Scripting::setNameDisplay(static_cast<Scripting::NameDisplay>(m_settings->value(NameDisplaySetting).toInt()));
-    m_settings->subscribe(NameDisplaySetting, this, [this](const QVariant& value) {
-        Scripting::setNameDisplay(static_cast<Scripting::NameDisplay>(value.toInt()));
+    m_settings->subscribe(Scripting::NameDisplaySetting, this, [this]() {
         // Views show script results of these tracks, so they are told that their names changed
         TrackList tracks;
         std::ranges::copy_if(m_library->libraryTracks(), std::back_inserter(tracks), hasLatinTag);
@@ -216,6 +212,33 @@ void SubsonicPlugin::initialise(const CorePluginContext& context)
 void SubsonicPlugin::initialise(const GuiPluginContext& context)
 {
     new SubsonicPage(m_provider.get(), m_libraryManager, m_library, m_settings, this);
+    m_nameDisplayPage = new NameDisplayPage(m_settings, this);
+
+    // View > Names and Lyrics applies at once
+    auto* viewMenu    = context.actionManager->actionContainer(Constants::Menus::View);
+    m_nameDisplayMenu = new QMenu(tr("&Names and Lyrics"), viewMenu->menu());
+    m_nameDisplayMenu->setStatusTip(tr("Show names and lyrics as the original, romanized, or both"));
+    auto* nameDisplayGroup = new QActionGroup(m_nameDisplayMenu);
+    for(const auto& [display, title] :
+        {std::pair{Scripting::NameDisplay::Original, tr("&Original")},
+         std::pair{Scripting::NameDisplay::Romanized, tr("&Romanized")},
+         std::pair{Scripting::NameDisplay::Both, tr("Original &and romanized")}}) {
+        auto* action = m_nameDisplayMenu->addAction(title);
+        action->setCheckable(true);
+        action->setData(static_cast<int>(display));
+        nameDisplayGroup->addAction(action);
+        QObject::connect(action, &QAction::triggered, this, [this, display]() {
+            m_settings->set(Scripting::NameDisplaySetting, static_cast<int>(display));
+        });
+    }
+    const auto checkNameDisplay = [nameDisplayGroup](const QVariant& value) {
+        for(QAction* action : nameDisplayGroup->actions()) {
+            action->setChecked(action->data() == value.toInt());
+        }
+    };
+    checkNameDisplay(m_settings->value(Scripting::NameDisplaySetting));
+    m_settings->subscribe(Scripting::NameDisplaySetting, m_nameDisplayMenu, checkNameDisplay);
+    viewMenu->addAction(m_nameDisplayMenu->menuAction(), Actions::Groups::Three);
 
     auto* fileMenu = context.actionManager->actionContainer(Constants::Menus::File);
 
@@ -252,11 +275,11 @@ void SubsonicPlugin::initialise(const GuiPluginContext& context)
     addServerAction(m_uploadAction, "Subsonic.UploadToServer", tr("Upload to This Server…"));
     addServerAction(m_ripAction, "Subsonic.RipCdToServer", tr("Rip CD to This Server…"));
 
-    // Uploads exist only for servers that offer them to this user, which is known once they have answered
-    updateUploadActions();
+    // Uploads and romanized names exist only for servers that offer them, which is known once they have answered
+    updateServerActions();
     QObject::connect(m_provider.get(), &SubsonicProvider::serverInfoChanged, this,
-                     &SubsonicPlugin::updateUploadActions);
-    QObject::connect(m_libraryManager, &LibraryManager::libraryRemoved, this, &SubsonicPlugin::updateUploadActions);
+                     &SubsonicPlugin::updateServerActions);
+    QObject::connect(m_libraryManager, &LibraryManager::libraryRemoved, this, &SubsonicPlugin::updateServerActions);
 }
 
 QString SubsonicPlugin::selectionServer(const TrackList& tracks) const
@@ -283,8 +306,15 @@ std::vector<UploadDialog::Server> SubsonicPlugin::uploadServers() const
     return servers;
 }
 
-void SubsonicPlugin::updateUploadActions()
+void SubsonicPlugin::updateServerActions()
 {
+    // Only servers with the romanization extension send romanized names, so without one there is nothing to choose
+    const auto libraries    = m_libraryManager->allLibraries();
+    const bool romanization = std::ranges::any_of(
+        libraries, [this](const auto& library) { return m_provider->hasRomanization(library.second.path); });
+    m_nameDisplayPage->setHidden(!romanization);
+    m_nameDisplayMenu->menuAction()->setVisible(romanization);
+
     const bool canUpload = !uploadServers().empty();
     m_uploadAction->setVisible(canUpload);
     // The audio CD plugin, where it is built and enabled, rips the disc

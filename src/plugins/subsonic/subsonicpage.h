@@ -37,5 +37,14 @@ public:
     SubsonicPage(SubsonicProvider* provider, LibraryManager* libraryManager, MusicLibrary* library,
                  SettingsManager* settings, QObject* parent = nullptr);
 };
+
+//! Interface > Names and Lyrics: how names and lyrics with a romanized form are shown.
+class NameDisplayPage : public SettingsPage
+{
+    Q_OBJECT
+
+public:
+    explicit NameDisplayPage(SettingsManager* settings, QObject* parent = nullptr);
+};
 } // namespace Subsonic
 } // namespace Fooyin

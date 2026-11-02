@@ -37,8 +37,8 @@
 
 using namespace Qt::StringLiterals;
 
-constexpr auto PageId = "Fooyin.Page.Library.Subsonic";
-constexpr auto NameDisplaySetting = "Subsonic/NameDisplay";
+constexpr auto PageId            = "Fooyin.Page.Library.Subsonic";
+constexpr auto NameDisplayPageId = "Fooyin.Page.Interface.NameDisplay";
 
 namespace Fooyin::Subsonic {
 class SubsonicPageWidget : public SettingsPageWidget
@@ -49,9 +49,9 @@ public:
     SubsonicPageWidget(SubsonicProvider* provider, LibraryManager* libraryManager, MusicLibrary* library,
                        SettingsManager* settings);
 
-    void load() override;
-    void apply() override;
-    void reset() override;
+    void load() override { }
+    void apply() override { }
+    void reset() override { }
 
 private:
     void populateServers();
@@ -59,7 +59,6 @@ private:
     void saveServer();
     void finishSave(Account account, const QString& existingPath);
     void updateScrobbleHint();
-    void updateNameDisplay();
 
     SubsonicProvider* m_provider;
     LibraryManager* m_libraryManager;
@@ -77,8 +76,6 @@ private:
     bool m_scrobbleTouched{false};
     QPushButton* m_save;
     QLabel* m_status;
-    QComboBox* m_nameDisplay;
-    QLabel* m_nameDisplayHint;
 };
 
 SubsonicPageWidget::SubsonicPageWidget(SubsonicProvider* provider, LibraryManager* libraryManager,
@@ -96,19 +93,12 @@ SubsonicPageWidget::SubsonicPageWidget(SubsonicProvider* provider, LibraryManage
     , m_scrobbleHint{new QLabel(this)}
     , m_save{new QPushButton(this)}
     , m_status{new QLabel(this)}
-    , m_nameDisplay{new QComboBox(this)}
-    , m_nameDisplayHint{new QLabel(this)}
 {
     m_server->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     m_url->setPlaceholderText(u"https://music.example.org"_s);
     m_password->setEchoMode(QLineEdit::Password);
     m_status->setWordWrap(true);
     m_scrobbleHint->setWordWrap(true);
-    m_nameDisplayHint->setWordWrap(true);
-
-    m_nameDisplay->addItem(tr("Original"), static_cast<int>(Scripting::NameDisplay::Original));
-    m_nameDisplay->addItem(tr("Romanized"), static_cast<int>(Scripting::NameDisplay::Romanized));
-    m_nameDisplay->addItem(tr("Original and romanized"), static_cast<int>(Scripting::NameDisplay::Both));
 
     auto* form = new QFormLayout();
     form->addRow(tr("Server") + u":"_s, m_server);
@@ -129,12 +119,6 @@ SubsonicPageWidget::SubsonicPageWidget(SubsonicProvider* provider, LibraryManage
     layout->addWidget(m_scrobbleHint);
     layout->addWidget(m_save, 0, Qt::AlignLeft);
     layout->addWidget(m_status);
-
-    auto* displayForm = new QFormLayout();
-    displayForm->addRow(tr("Show names and lyrics") + u":"_s, m_nameDisplay);
-    layout->addSpacing(12);
-    layout->addLayout(displayForm);
-    layout->addWidget(m_nameDisplayHint);
     layout->addStretch();
 
     populateServers();
@@ -146,35 +130,7 @@ SubsonicPageWidget::SubsonicPageWidget(SubsonicProvider* provider, LibraryManage
         if(libraryPath == m_server->currentData().toString()) {
             updateScrobbleHint();
         }
-        updateNameDisplay();
     });
-}
-
-void SubsonicPageWidget::load()
-{
-    m_nameDisplay->setCurrentIndex(std::max(0, m_nameDisplay->findData(m_settings->value(NameDisplaySetting).toInt())));
-    updateNameDisplay();
-}
-
-void SubsonicPageWidget::apply()
-{
-    m_settings->set(NameDisplaySetting, m_nameDisplay->currentData().toInt());
-}
-
-void SubsonicPageWidget::reset()
-{
-    m_settings->reset(NameDisplaySetting);
-}
-
-void SubsonicPageWidget::updateNameDisplay()
-{
-    const auto libraries = m_libraryManager->allLibraries();
-    const bool romanization = std::ranges::any_of(
-        libraries, [this](const auto& library) { return m_provider->hasRomanization(library.second.path); });
-
-    m_nameDisplay->setEnabled(romanization);
-    m_nameDisplayHint->setText(romanization ? tr("Uses the romanized names and lyrics your servers send.")
-                                            : tr("Your servers don't send romanized names."));
 }
 
 void SubsonicPageWidget::populateServers()
@@ -316,6 +272,63 @@ void SubsonicPageWidget::finishSave(Account account, const QString& existingPath
     m_server->setCurrentIndex(std::max(0, m_server->findData(path)));
 }
 
+class NameDisplayPageWidget : public SettingsPageWidget
+{
+    Q_OBJECT
+
+public:
+    explicit NameDisplayPageWidget(SettingsManager* settings);
+
+    void load() override;
+    void apply() override;
+    void reset() override;
+
+private:
+    SettingsManager* m_settings;
+    QComboBox* m_nameDisplay;
+};
+
+NameDisplayPageWidget::NameDisplayPageWidget(SettingsManager* settings)
+    : m_settings{settings}
+    , m_nameDisplay{new QComboBox(this)}
+{
+    m_nameDisplay->addItem(tr("Original"), static_cast<int>(Scripting::NameDisplay::Original));
+    m_nameDisplay->addItem(tr("Romanized"), static_cast<int>(Scripting::NameDisplay::Romanized));
+    m_nameDisplay->addItem(tr("Original and romanized"), static_cast<int>(Scripting::NameDisplay::Both));
+
+    auto* hint = new QLabel(tr("Names and lyrics in other scripts, such as Japanese or Chinese, can be shown in Latin "
+                               "letters, as your servers romanize them."),
+                            this);
+    hint->setWordWrap(true);
+
+    auto* form = new QFormLayout();
+    form->addRow(tr("Show names and lyrics") + u":"_s, m_nameDisplay);
+
+    auto* layout = new QVBoxLayout(this);
+    layout->addWidget(hint);
+    layout->addLayout(form);
+    layout->addStretch();
+
+    // The View menu changes it too
+    m_settings->subscribe(Scripting::NameDisplaySetting, this, [this]() { load(); });
+}
+
+void NameDisplayPageWidget::load()
+{
+    const int display = m_settings->value(Scripting::NameDisplaySetting).toInt();
+    m_nameDisplay->setCurrentIndex(std::max(0, m_nameDisplay->findData(display)));
+}
+
+void NameDisplayPageWidget::apply()
+{
+    m_settings->set(Scripting::NameDisplaySetting, m_nameDisplay->currentData().toInt());
+}
+
+void NameDisplayPageWidget::reset()
+{
+    m_settings->reset(Scripting::NameDisplaySetting);
+}
+
 SubsonicPage::SubsonicPage(SubsonicProvider* provider, LibraryManager* libraryManager, MusicLibrary* library,
                            SettingsManager* settings, QObject* parent)
     : SettingsPage{settings->settingsDialog(), parent}
@@ -326,6 +339,15 @@ SubsonicPage::SubsonicPage(SubsonicProvider* provider, LibraryManager* libraryMa
     setWidgetCreator([provider, libraryManager, library, settings] {
         return new SubsonicPageWidget(provider, libraryManager, library, settings);
     });
+}
+
+NameDisplayPage::NameDisplayPage(SettingsManager* settings, QObject* parent)
+    : SettingsPage{settings->settingsDialog(), parent}
+{
+    setId(NameDisplayPageId);
+    setName(tr("Names and Lyrics"));
+    setCategory({tr("Interface"), tr("Names and Lyrics")});
+    setWidgetCreator([settings] { return new NameDisplayPageWidget(settings); });
 }
 } // namespace Fooyin::Subsonic
 

@@ -33,6 +33,7 @@
 #include <set>
 
 class QAction;
+class QMenu;
 
 namespace Fooyin {
 class AudioLoader;
@@ -41,6 +42,7 @@ class Playlist;
 }
 
 namespace Fooyin::Subsonic {
+class NameDisplayPage;
 class SubsonicProvider;
 
 class SubsonicPlugin : public QObject,
@@ -65,7 +67,8 @@ private:
     //! Returns the library path of the server of all @p tracks, or an empty string if they are not on one server.
     [[nodiscard]] QString selectionServer(const TrackList& tracks) const;
     [[nodiscard]] std::vector<UploadDialog::Server> uploadServers() const;
-    void updateUploadActions();
+    //! Shows the upload and name display actions only where a server offers them.
+    void updateServerActions();
     UploadDialog* createUploadDialog(const QString& libraryPath);
     void scrobble(const Track& track, bool submission);
     void writeStats(const TrackList& tracks, Track::Stats stats);
@@ -87,6 +90,9 @@ private:
     std::shared_ptr<SubsonicProvider> m_provider;
     QAction* m_uploadAction{nullptr};
     QAction* m_ripAction{nullptr};
+    NameDisplayPage* m_nameDisplayPage{nullptr};
+    //! View > Names and Lyrics, owned by the View menu.
+    QMenu* m_nameDisplayMenu{nullptr};
     std::set<QString> m_pendingPlaylistSyncs;
     //! Mirrored playlists edited locally and not yet saved on the server, with a count of their edits.
     std::map<QString, int> m_dirtyPlaylists;

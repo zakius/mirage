@@ -19,6 +19,7 @@
 
 #pragma once
 
+#include <core/scripting/displayname.h>
 #include <core/track.h>
 
 #include <QJsonObject>
@@ -34,13 +35,12 @@ class QNetworkReply;
 class QObject;
 
 namespace Fooyin::Subsonic {
-//! Extra tags holding the romanized names of the OpenSubsonic `romanization` extension, where they differ.
-constexpr auto TitleLatinTag       = "TITLELATIN";
-constexpr auto AlbumLatinTag       = "ALBUMLATIN";
-constexpr auto ArtistLatinTag      = "ARTISTLATIN";
-//! The romanized names of the artists that are not album artists, as %trackartist% lists them.
-constexpr auto TrackArtistLatinTag = "TRACKARTISTLATIN";
-constexpr auto AlbumArtistLatinTag = "ALBUMARTISTLATIN";
+// The OpenSubsonic `romanization` extension's names go to the core's romanized name tags
+using Scripting::AlbumArtistLatinTag;
+using Scripting::AlbumLatinTag;
+using Scripting::ArtistLatinTag;
+using Scripting::TitleLatinTag;
+using Scripting::TrackArtistLatinTag;
 
 struct Account
 {
