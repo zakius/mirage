@@ -54,6 +54,9 @@ Q_SIGNALS:
 
 private:
     void updateTrack(const Track& track, bool metadataOnly);
+    void clearLyrics();
+    //! Searches the playing track's lyrics again, if they were searched.
+    void reloadLyrics();
     void updateDemand();
     void findLyrics(bool automatic);
     void updateCurrentLine();

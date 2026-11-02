@@ -25,6 +25,7 @@
 
 #include <core/player/playercontroller.h>
 #include <core/plugins/coreplugincontext.h>
+#include <core/scripting/displayname.h>
 #include <core/scripting/scriptregistry.h>
 #include <utils/settings/settingsmanager.h>
 
@@ -64,6 +65,8 @@ LyricsPlaybackService::LyricsPlaybackService(const CorePluginContext& core, Lyri
                      [this](const Track& track) { updateTrack(track, false); });
     QObject::connect(m_player, &PlayerController::currentTrackUpdated, this,
                      [this](const Track& track) { updateTrack(track, true); });
+    // Server lyrics come with the romanized lines the name display asks for
+    m_settings->subscribe(Scripting::NameDisplaySetting, this, &LyricsPlaybackService::reloadLyrics);
     QObject::connect(m_player, &PlayerController::positionChanged, this, &LyricsPlaybackService::updateCurrentLine);
     QObject::connect(m_player, &PlayerController::positionMoved, this, &LyricsPlaybackService::updateCurrentLine);
     QObject::connect(m_player, &PlayerController::playStateChanged, this, &LyricsPlaybackService::updateCurrentLine);
@@ -142,12 +145,7 @@ void LyricsPlaybackService::updateTrack(const Track& track, bool metadataOnly)
     const Track previousTrack = std::exchange(m_track, track);
 
     if(!preserve) {
-        m_finder->cancel();
-        m_searching = false;
-        m_searched  = false;
-        m_lyrics    = {};
-        m_lineDirty = true;
-        m_candidates.clear();
+        clearLyrics();
     }
 
     updateCurrentLine();
@@ -163,6 +161,31 @@ void LyricsPlaybackService::updateTrack(const Track& track, bool metadataOnly)
 
     if(!preserve && m_context->isObserved(m_source)) {
         findLyrics(!metadataOnly);
+    }
+}
+
+void LyricsPlaybackService::clearLyrics()
+{
+    m_finder->cancel();
+    m_searching = false;
+    m_searched  = false;
+    m_lyrics    = {};
+    m_lineDirty = true;
+    m_candidates.clear();
+}
+
+void LyricsPlaybackService::reloadLyrics()
+{
+    if(!m_searched) {
+        return;
+    }
+
+    clearLyrics();
+    updateCurrentLine();
+    Q_EMIT changed();
+
+    if(m_context->isObserved(m_source)) {
+        findLyrics(true);
     }
 }
 

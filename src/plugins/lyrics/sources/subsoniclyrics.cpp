@@ -37,8 +37,6 @@
 using namespace Qt::StringLiterals;
 
 constexpr auto SongMarker = "/song/";
-//! The Subsonic plugin's name display setting: 0 original, 1 romanized, 2 both.
-constexpr auto NameDisplaySetting = "Subsonic/NameDisplay";
 
 namespace {
 //! Servers may send a single object in place of a one-element array.
@@ -145,7 +143,7 @@ void SubsonicLyrics::requestLyrics()
 
         auto layers = LyricsLayers::Main;
         if(extensions.romanization) {
-            const auto display = static_cast<Scripting::NameDisplay>(settings()->value(NameDisplaySetting).toInt());
+            const auto display = Scripting::nameDisplay();
             layers = display == Scripting::NameDisplay::Romanized ? LyricsLayers::Pronunciation
                    : display == Scripting::NameDisplay::Both      ? LyricsLayers::MainAndPronunciation
                                                                   : LyricsLayers::Main;
