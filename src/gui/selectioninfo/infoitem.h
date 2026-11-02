@@ -77,6 +77,7 @@ public:
 
     [[nodiscard]] ItemType type() const;
     [[nodiscard]] QString name() const;
+    void setName(const QString& name);
     [[nodiscard]] QVariant value() const;
 
     void setIsFloat(bool isFloat);

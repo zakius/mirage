@@ -30,6 +30,8 @@
 #include <QDir>
 
 #include <algorithm>
+#include <map>
+#include <optional>
 #include <set>
 #include <tuple>
 
@@ -62,26 +64,25 @@ QString parentKey(ItemParent parent)
 } // namespace
 
 namespace {
-//! Marks the album and artists of a server song, which can be starred, with a filled or an empty star.
-QStringList withStar(const Track& track, const QString& field, QStringList values)
+//! Whether the song, album or artist of @p field is starred on a server; std::nullopt where it cannot be starred.
+std::optional<bool> starred(const Track& track, const QString& field)
 {
+    // A server song's star is its loved flag
+    if(field.compare("title"_L1, Qt::CaseInsensitive) == 0) {
+        return track.filepath().startsWith("subsonic:"_L1) ? std::optional{track.isLoved()} : std::nullopt;
+    }
     const bool album = field.compare("album"_L1, Qt::CaseInsensitive) == 0;
     if(!album && field.compare("artist"_L1, Qt::CaseInsensitive) != 0
        && field.compare("albumartist"_L1, Qt::CaseInsensitive) != 0) {
-        return values;
+        return {};
     }
     const bool starrable = album ? track.hasExtraTag(QString::fromLatin1(Mirage::AlbumIdTag))
                                  : track.hasExtraTag(QString::fromLatin1(Mirage::ArtistIdTag))
                                        || track.hasExtraTag(QString::fromLatin1(Mirage::AlbumArtistIdTag));
     if(!starrable) {
-        return values;
+        return {};
     }
-    const bool starred
-        = track.hasExtraTag(QString::fromLatin1(album ? Mirage::AlbumStarredTag : Mirage::ArtistStarredTag));
-    for(QString& value : values) {
-        value += starred ? u" ★"_s : u" ☆"_s;
-    }
-    return values;
+    return track.hasExtraTag(QString::fromLatin1(album ? Mirage::AlbumStarredTag : Mirage::ArtistStarredTag));
 }
 } // namespace
 
@@ -141,6 +142,8 @@ public:
     std::set<float> m_albumPeak;
     std::set<float> m_opusHeaderGain;
     std::set<QString> m_seenSegmentFileSizePaths;
+    //! By metadata node key, whether its songs, albums or artists are starred, for nodes whose all can be.
+    std::map<QString, std::optional<bool>> m_stars;
     int m_opusTrackCount{0};
 };
 
@@ -153,6 +156,7 @@ void InfoPopulatorPrivate::reset()
     m_albumPeak.clear();
     m_opusHeaderGain.clear();
     m_seenSegmentFileSizePaths.clear();
+    m_stars.clear();
     m_opusTrackCount = 0;
 }
 
@@ -206,8 +210,14 @@ void InfoPopulatorPrivate::addTrackMetadata(const Track& track, bool extended,
             continue;
         }
 
-        checkAddEntryNode(u"Metadata/%1"_s.arg(field.scriptField.toUpper()), field.name, ItemParent::Metadata,
-                          withStar(track, field.scriptField, track.metaValues(field.scriptField)));
+        const QString key = u"Metadata/%1"_s.arg(field.scriptField.toUpper());
+        checkAddEntryNode(key, field.name, ItemParent::Metadata, track.metaValues(field.scriptField));
+
+        // A field is starred where all selected tracks' songs, albums or artists are, and can be where all of them can
+        const auto star = starred(track, field.scriptField);
+        if(const auto [it, inserted] = m_stars.try_emplace(key, star); !inserted && it->second) {
+            it->second = star ? std::optional{*it->second && *star} : std::nullopt;
+        }
     }
 
     if(extended) {
@@ -439,6 +449,13 @@ void InfoPopulatorPrivate::addTrackNodes(InfoItem::Options options, const TrackL
         }
         if(options & InfoItem::Other) {
             addTrackOther(track);
+        }
+    }
+
+    for(const auto& [key, star] : m_stars) {
+        if(star && m_data.nodes.contains(key)) {
+            InfoItem& node = m_data.nodes.at(key);
+            node.setName(node.name() + (*star ? u" ★"_s : u" ☆"_s));
         }
     }
 

@@ -278,6 +278,11 @@ QString InfoItem::name() const
     return m_name;
 }
 
+void InfoItem::setName(const QString& name)
+{
+    m_name = name;
+}
+
 QVariant InfoItem::value() const
 {
     switch(m_valueType) {
