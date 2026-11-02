@@ -26,6 +26,8 @@
 #include <QLabel>
 #include <QTextDocument>
 
+#include <utility>
+
 using namespace Qt::StringLiterals;
 
 namespace {
@@ -98,6 +100,18 @@ QWidget* SettingsPage::widget()
     }
 
     return m_widget;
+}
+
+bool SettingsPage::isHidden() const
+{
+    return m_hidden;
+}
+
+void SettingsPage::setHidden(bool hidden)
+{
+    if(std::exchange(m_hidden, hidden) != hidden) {
+        Q_EMIT hiddenChanged();
+    }
 }
 
 bool SettingsPage::matches(const QString& text)

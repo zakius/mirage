@@ -283,8 +283,11 @@ SettingsDialog::SettingsDialog(PageList pages, QWidget* parent)
     m_filterModel->setSourceModel(m_model);
 
     std::set<Id> pageIds;
-    for(const auto* page : m_pages) {
-        pageIds.emplace(page->id());
+    for(auto* page : m_pages) {
+        if(!page->isHidden()) {
+            pageIds.emplace(page->id());
+        }
+        QObject::connect(page, &SettingsPage::hiddenChanged, this, [this]() { filterPages(m_search->text()); });
     }
     m_filterModel->setMatchingPages(std::move(pageIds));
 
@@ -349,6 +352,10 @@ void SettingsDialog::openPage(const Id& id)
     const auto* category = m_model->categoryForPage(id);
     if(!category) {
         qCWarning(SETTINGS) << "Page not found:" << id.name();
+        return;
+    }
+
+    if(findPage(id)->isHidden()) {
         return;
     }
 
@@ -663,7 +670,7 @@ void SettingsDialog::filterPages(const QString& text)
 
     std::set<Id> matchingPages;
     for(auto* page : m_pages) {
-        if(page->matches(query)) {
+        if(!page->isHidden() && page->matches(query)) {
             matchingPages.emplace(page->id());
         }
         page->setSearchFilter(query);

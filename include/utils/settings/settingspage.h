@@ -107,6 +107,13 @@ public:
 
     [[nodiscard]] QString validationError() const;
 
+    //! A hidden page is left out of the settings dialog, also while it is open.
+    [[nodiscard]] bool isHidden() const;
+    void setHidden(bool hidden);
+
+Q_SIGNALS:
+    void hiddenChanged();
+
 protected:
     void setId(const Id& id);
     void setName(const QString& name);
@@ -134,5 +141,6 @@ private:
     QByteArray m_state;
     std::optional<QString> m_searchKeywords;
     std::optional<QString> m_searchText;
+    bool m_hidden{false};
 };
 } // namespace Fooyin
