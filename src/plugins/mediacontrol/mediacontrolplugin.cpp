@@ -21,7 +21,9 @@
 #include "mediacontrolplugin.h"
 
 #include <core/player/playercontroller.h>
+#include <core/scripting/displayname.h>
 #include <gui/windowcontroller.h>
+#include <utils/settings/settingsmanager.h>
 
 #include <QBuffer>
 #include <QLoggingCategory>
@@ -78,6 +80,7 @@ void MediaControlPlugin::initialise(const CorePluginContext& context)
                      &MediaControlPlugin::trackChanged);
     QObject::connect(m_playerController, &PlayerController::playStateChanged, this,
                      &MediaControlPlugin::playStateChanged);
+    m_settings->subscribe(Scripting::NameDisplaySetting, this, [this]() { updateDisplay(); });
 }
 
 void MediaControlPlugin::initialise(const GuiPluginContext& context)
@@ -223,12 +226,13 @@ void MediaControlPlugin::updateDisplay()
         }
 
         const auto& track = playlistTrack.track;
+        const auto names  = Scripting::trackDisplayNames(track);
 
         updater.Type(MediaPlaybackType::Music);
-        updater.MusicProperties().Title(track.title().toStdWString());
-        updater.MusicProperties().Artist(track.artist().toStdWString());
-        updater.MusicProperties().AlbumArtist(track.albumArtist().toStdWString());
-        updater.MusicProperties().AlbumTitle(track.album().toStdWString());
+        updater.MusicProperties().Title(names.title.toStdWString());
+        updater.MusicProperties().Artist(names.artists.join(QStringLiteral(", ")).toStdWString());
+        updater.MusicProperties().AlbumArtist(names.albumArtists.join(QStringLiteral(", ")).toStdWString());
+        updater.MusicProperties().AlbumTitle(names.album.toStdWString());
         updater.MusicProperties().TrackNumber(track.trackNumber().toInt());
 
         auto genres = updater.MusicProperties().Genres();

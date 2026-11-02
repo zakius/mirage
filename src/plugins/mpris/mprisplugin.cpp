@@ -25,6 +25,7 @@
 #include <core/coresettings.h>
 #include <core/engine/enginecontroller.h>
 #include <core/player/playercontroller.h>
+#include <core/scripting/displayname.h>
 #include <gui/guipaths.h>
 #include <gui/windowcontroller.h>
 #include <utils/actions/actioncontainer.h>
@@ -207,6 +208,8 @@ void MprisPlugin::initialise(const CorePluginContext& context)
     });
 
     QObject::connect(this, &MprisPlugin::reloadMetadata, this, [this]() { notify(u"Metadata"_s, metadata()); });
+    m_settings->subscribe(Scripting::NameDisplaySetting, this,
+                          [this]() { trackChanged(m_playerController->currentPlaylistTrack()); });
 }
 
 void MprisPlugin::initialise(const GuiPluginContext& context)
@@ -560,9 +563,10 @@ void MprisPlugin::loadMetaData(const PlaylistTrack& playlistTrack)
         m_currentMetaData[u"mpris:trackid"_s]   = formatTrackId(playlistTrack);
         m_currentMetaData[u"mpris:length"_s]    = static_cast<quint64>(track.duration() * Time::UsPerMs);
         m_currentMetaData[u"xesam:url"_s]       = QUrl::fromLocalFile(track.filepath()).toString();
-        m_currentMetaData[u"xesam:title"_s]     = track.effectiveTitle();
-        m_currentMetaData[u"xesam:album"_s]     = track.album();
-        m_currentMetaData[u"xesam:artist"_s]    = track.artists();
+        const auto names                        = Scripting::trackDisplayNames(track);
+        m_currentMetaData[u"xesam:title"_s]     = names.title;
+        m_currentMetaData[u"xesam:album"_s]     = names.album;
+        m_currentMetaData[u"xesam:artist"_s]    = names.artists;
         m_currentMetaData[u"xesam:genre"_s]     = track.genres();
         m_currentMetaData[u"xesam:firstUsed"_s] = formatDateTime(track.firstPlayed());
         m_currentMetaData[u"xesam:lastUsed"_s]  = formatDateTime(track.lastPlayed());
@@ -570,7 +574,7 @@ void MprisPlugin::loadMetaData(const PlaylistTrack& playlistTrack)
 
         addIntMetadata(u"xesam:trackNumber"_s, track.trackNumber());
         addIntMetadata(u"xesam:discNumber"_s, track.discNumber());
-        addStringListMetadata(u"xesam:albumArtist"_s, track.albumArtists());
+        addStringListMetadata(u"xesam:albumArtist"_s, names.albumArtists);
         addStringListMetadata(u"xesam:composer"_s, track.composers());
         QStringList comments;
         if(!track.comment().isEmpty()) {
