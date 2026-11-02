@@ -157,4 +157,12 @@ TEST(SubsonicApiTest, OmitsFieldsTheServerLeavesOut)
     EXPECT_TRUE(track.extraTags().empty());
     EXPECT_EQ(track.composers(), QStringList{u"C, D"_s});
 }
+
+TEST(SubsonicApiTest, ServerAddressesWithoutASchemeUseHttps)
+{
+    EXPECT_EQ(QUrl{u"https://music.example.org:4533"_s}, Subsonic::serverUrl(u" music.example.org:4533 "_s));
+    EXPECT_EQ(QUrl{u"https://music.example.org/sub"_s}, Subsonic::serverUrl(u"music.example.org/sub"_s));
+    EXPECT_EQ(QUrl{u"http://192.168.1.2:4533"_s}, Subsonic::serverUrl(u"http://192.168.1.2:4533"_s));
+    EXPECT_TRUE(Subsonic::serverUrl(u""_s).isEmpty());
+}
 } // namespace Fooyin::Testing

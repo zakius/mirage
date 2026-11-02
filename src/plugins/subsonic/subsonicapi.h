@@ -64,6 +64,9 @@ struct ApiError
 //! Receives the "subsonic-response" object of a successful call, or std::nullopt and the error.
 using ResponseCallback = std::function<void(std::optional<QJsonObject> response, ApiError error)>;
 
+//! Returns the server URL the user typed in @p address, with https for an address without a scheme.
+[[nodiscard]] QUrl serverUrl(const QString& address);
+
 //! Returns the authenticated URL of the API @p method. Each call uses a new salt.
 [[nodiscard]] QUrl apiUrl(const Account& account, const QString& method, QUrlQuery params = {});
 

@@ -184,6 +184,12 @@ QString idFromPath(const QString& path, const QString& kind)
 } // namespace
 
 namespace Fooyin::Subsonic {
+QUrl serverUrl(const QString& address)
+{
+    const QString text = address.trimmed();
+    return QUrl::fromUserInput(text.isEmpty() || text.contains("://"_L1) ? text : u"https://"_s + text);
+}
+
 QUrl apiUrl(const Account& account, const QString& method, QUrlQuery params)
 {
     const QString salt  = randomSalt();

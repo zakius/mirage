@@ -147,7 +147,8 @@ Subsonic API documentation.
 
 - **Client.** Token authentication (`t = md5(password + salt)`, `s = salt`), `f=json`, `c=mirage`, `v=1.16.1`. Errors
   are taken from `subsonic-response.error`.
-- **Account.** A settings page adds a server: base URL, user name, password. The password goes to the core
+- **Account.** A settings page adds a server: base URL (https if the address has no scheme; a warning shows while it
+  is http), user name, password. The password goes to the core
   `AccountStore`. The page calls `addLibrary("subsonic://user@host:port[/path]", name)`.
 - **Full sync.** `search3` with `query=""`, `songCount=500`, paged by `songOffset` until a page adds no songs (servers
   may send fewer than asked, and one that ignores `songOffset` repeats its songs). Each song becomes a `Track`:

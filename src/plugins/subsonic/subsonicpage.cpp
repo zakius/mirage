@@ -72,6 +72,8 @@ private:
     QLineEdit* m_password;
     QCheckBox* m_scrobble;
     QLabel* m_scrobbleHint;
+    //! Shown while the server URL uses plain HTTP.
+    QLabel* m_httpWarning;
     //! Set once the user changes m_scrobble, so an untouched box keeps following the server.
     bool m_scrobbleTouched{false};
     QPushButton* m_save;
@@ -91,6 +93,9 @@ SubsonicPageWidget::SubsonicPageWidget(SubsonicProvider* provider, LibraryManage
     , m_password{new QLineEdit(this)}
     , m_scrobble{new QCheckBox(tr("Also scrobble this server's plays with mirage's scrobbler"), this)}
     , m_scrobbleHint{new QLabel(this)}
+    , m_httpWarning{new QLabel(tr("This server is reached over plain HTTP: your user name, password token and music "
+                                  "cross the network unencrypted. Use an https:// address if the server has one."),
+                               this)}
     , m_save{new QPushButton(this)}
     , m_status{new QLabel(this)}
 {
@@ -99,11 +104,14 @@ SubsonicPageWidget::SubsonicPageWidget(SubsonicProvider* provider, LibraryManage
     m_password->setEchoMode(QLineEdit::Password);
     m_status->setWordWrap(true);
     m_scrobbleHint->setWordWrap(true);
+    m_httpWarning->setWordWrap(true);
+    m_httpWarning->hide();
 
     auto* form = new QFormLayout();
     form->addRow(tr("Server") + u":"_s, m_server);
     form->addRow(tr("Name") + u":"_s, m_name);
     form->addRow(tr("Server URL") + u":"_s, m_url);
+    form->addRow(QString{}, m_httpWarning);
     form->addRow(tr("Username") + u":"_s, m_username);
     form->addRow(tr("Password") + u":"_s, m_password);
 
@@ -125,6 +133,9 @@ SubsonicPageWidget::SubsonicPageWidget(SubsonicProvider* provider, LibraryManage
 
     QObject::connect(m_server, &QComboBox::currentIndexChanged, this, &SubsonicPageWidget::serverChanged);
     QObject::connect(m_save, &QPushButton::clicked, this, &SubsonicPageWidget::saveServer);
+    QObject::connect(m_url, &QLineEdit::textChanged, this, [this](const QString& address) {
+        m_httpWarning->setVisible(serverUrl(address).scheme() == "http"_L1);
+    });
     QObject::connect(m_scrobble, &QCheckBox::clicked, this, [this]() { m_scrobbleTouched = true; });
     QObject::connect(m_provider, &SubsonicProvider::serverInfoChanged, this, [this](const QString& libraryPath) {
         if(libraryPath == m_server->currentData().toString()) {
@@ -192,7 +203,7 @@ void SubsonicPageWidget::saveServer()
     const QString existingPath = m_server->currentData().toString();
     const auto existing        = m_provider->accountForPath(existingPath);
 
-    Account account{.url      = QUrl::fromUserInput(m_url->text().trimmed()),
+    Account account{.url      = serverUrl(m_url->text()),
                     .username = m_username->text().trimmed(),
                     .password = m_password->text(),
                     .scrobble = {}};
