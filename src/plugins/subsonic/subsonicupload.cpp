@@ -83,7 +83,7 @@ UploadTags uploadTagsFromTracks(const TrackList& tracks)
                                .number = number,
                                .title  = track.title().isEmpty() ? QFileInfo{track.filepath()}.completeBaseName()
                                                                  : track.title(),
-                               .artist = joined(track.artists()),
+                               .artists = track.artists(),
                                .file   = track.filepath()});
     }
 
@@ -109,16 +109,18 @@ QUrlQuery createUploadQuery(const UploadTags& tags)
 
     QJsonArray tracks;
     for(const UploadTrack& track : tags.tracks) {
-        tracks.append(QJsonObject{{u"disc"_s, track.disc},
-                                  {u"number"_s, track.number},
-                                  {u"title"_s, track.title},
-                                  {u"artist"_s, track.artist}});
+        QJsonObject object{{u"disc"_s, track.disc}, {u"number"_s, track.number}, {u"title"_s, track.title}};
+        if(!track.artists.isEmpty()) {
+            object.insert(u"artists"_s, QJsonArray::fromStringList(track.artists));
+        }
+        tracks.append(object);
     }
 
-    QJsonObject object{{u"album"_s, tags.album},
-                       {u"albumArtist"_s, tags.albumArtist},
-                       {u"genre"_s, tags.genre},
-                       {u"track"_s, tracks}};
+    QJsonObject object{{u"album"_s, tags.album}, {u"genre"_s, tags.genre}, {u"track"_s, tracks}};
+    // The server takes the tracks' artists for an album without one
+    if(!tags.albumArtist.isEmpty()) {
+        object.insert(u"albumArtist"_s, tags.albumArtist);
+    }
     if(!tags.year.isEmpty()) {
         object.insert(u"year"_s, yearValue(tags.year));
     }
@@ -160,11 +162,12 @@ std::vector<DiscRelease> discReleases(const QJsonObject& response)
 
         for(const auto& trackItem : toArray(object.value("track"_L1))) {
             const QJsonObject track = trackItem.toObject();
-            release.tracks.push_back({.disc   = release.discNumber,
-                                      .number = track.value("number"_L1).toInt(),
-                                      .title  = track.value("title"_L1).toString(),
-                                      .artist = track.value("artist"_L1).toString(),
-                                      .file   = {}});
+            const QString artist = track.value("artist"_L1).toString();
+            release.tracks.push_back({.disc    = release.discNumber,
+                                      .number  = track.value("number"_L1).toInt(),
+                                      .title   = track.value("title"_L1).toString(),
+                                      .artists = artist.isEmpty() ? QStringList{} : QStringList{artist},
+                                      .file    = {}});
         }
 
         if(!release.id.isEmpty()) {
@@ -176,7 +179,7 @@ std::vector<DiscRelease> discReleases(const QJsonObject& response)
 
 bool isDuplicateError(const ApiError& error)
 {
-    return error.code == 0 && error.message.contains("already in the library"_L1, Qt::CaseInsensitive);
+    return error.duplicate;
 }
 
 Uploader::Uploader(QNetworkAccessManager* network, Account account, UploadTags tags, QObject* parent)

@@ -201,11 +201,13 @@ private:
         return object;
     }
 
-    static QJsonObject error(int code, const QString& message)
+    static QJsonObject error(int code, const QString& message, bool duplicate = false)
     {
-        return {{u"status"_s, u"failed"_s},
-                {u"version"_s, u"1.16.1"_s},
-                {u"error"_s, QJsonObject{{u"code"_s, code}, {u"message"_s, message}}}};
+        QJsonObject error{{u"code"_s, code}, {u"message"_s, message}};
+        if(duplicate) {
+            error.insert(u"duplicate"_s, true);
+        }
+        return {{u"status"_s, u"failed"_s}, {u"version"_s, u"1.16.1"_s}, {u"error"_s, error}};
     }
 
     static QJsonObject uploadObject(const QString& id, const std::vector<Slot>& slots, bool withSizes)
@@ -317,7 +319,7 @@ private:
                 }
             }
             if(albumExists && query.queryItemValue(u"replace"_s) != "true"_L1) {
-                return error(0, u"Album already in the library"_s);
+                return error(0, u"Album already in the library"_s, true);
             }
             committed = true;
             return ok({{u"album"_s, QJsonObject{{u"id"_s, u"al-1"_s},
@@ -377,7 +379,7 @@ protected:
         for(const QString& file : files) {
             ++number;
             tags.tracks.push_back(
-                {.disc = 1, .number = number, .title = u"Track %1"_s.arg(number), .artist = u"Artist"_s, .file = file});
+                {.disc = 1, .number = number, .title = u"Track %1"_s.arg(number), .artists = {u"Artist"_s}, .file = file});
         }
         return tags;
     }
@@ -417,9 +419,12 @@ TEST_F(SubsonicUploadTest, UploadsEveryFileInChunksAndCommits)
 
     EXPECT_EQ(u"Album"_s, m_server->createdTags.value("album"_L1).toString());
     EXPECT_EQ(1999, m_server->createdTags.value("year"_L1).toInt());
+    EXPECT_EQ(u"Artist"_s, m_server->createdTags.value("albumArtist"_L1).toString());
     const QJsonObject track = m_server->createdTags.value("track"_L1).toArray().at(1).toObject();
     EXPECT_EQ(2, track.value("number"_L1).toInt());
     EXPECT_EQ(u"Track 2"_s, track.value("title"_L1).toString());
+    EXPECT_EQ(QJsonArray{u"Artist"_s}, track.value("artists"_L1).toArray());
+    EXPECT_FALSE(track.contains("artist"_L1));
 
     EXPECT_FALSE(QFileInfo::exists(workFolder));
 }
@@ -515,9 +520,9 @@ TEST_F(SubsonicUploadTest, OffersReplaceOnlyForAnAlbumAlreadyInTheLibrary)
     ASSERT_TRUE(waitFor([&committed]() { return committed; }));
     EXPECT_EQ(u"true"_s, m_server->queries.back().queryItemValue(u"replace"_s));
 
-    EXPECT_FALSE(Subsonic::isDuplicateError({.code = 0, .message = u"Track 1 is incomplete"_s}));
-    EXPECT_FALSE(Subsonic::isDuplicateError({.code = 50, .message = u"already in the library"_s}));
-    EXPECT_FALSE(Subsonic::isDuplicateError({.code = -1, .message = u"HTTP 500"_s}));
+    // The flag decides, not the text
+    EXPECT_FALSE(Subsonic::isDuplicateError({.code = 0, .message = u"Album already in the library"_s}));
+    EXPECT_TRUE(Subsonic::isDuplicateError({.code = 0, .message = u"Bereits vorhanden"_s, .duplicate = true}));
 }
 
 TEST_F(SubsonicUploadTest, CancelDeletesTheUploadAndTheWorkFolder)
@@ -670,7 +675,7 @@ TEST_F(SubsonicUploadTest, AsksLookupDiscWithTheDiscIdAndTocOfTheDisc)
     ASSERT_EQ(2, release.tracks.size());
     EXPECT_EQ(2, release.tracks.at(1).disc);
     EXPECT_EQ(u"Two"_s, release.tracks.at(1).title);
-    EXPECT_EQ(u"B"_s, release.tracks.at(1).artist);
+    EXPECT_EQ(QStringList{u"B"_s}, release.tracks.at(1).artists);
 }
 
 TEST(SubsonicUploadTagsTest, StartsFromTheFilesTags)
@@ -693,11 +698,27 @@ TEST(SubsonicUploadTagsTest, StartsFromTheFilesTags)
     EXPECT_EQ(u"Rock; Pop"_s, tags.genre);
     ASSERT_EQ(2, tags.tracks.size());
     EXPECT_EQ(2, tags.tracks.at(0).number);
-    EXPECT_EQ(u"A; B"_s, tags.tracks.at(0).artist);
+    EXPECT_EQ((QStringList{u"A"_s, u"B"_s}), tags.tracks.at(0).artists);
     EXPECT_EQ(1, tags.tracks.at(1).number);
     // A file without a title is named after the file
     EXPECT_EQ(u"b"_s, tags.tracks.at(1).title);
     EXPECT_EQ(u"/music/b.flac"_s, tags.tracks.at(1).file);
+}
+
+TEST(SubsonicUploadTagsTest, SendsEachArtistAndLeavesOutAnEmptyAlbumArtist)
+{
+    Subsonic::UploadTags tags;
+    tags.album = u"Album"_s;
+    tags.tracks.push_back({.disc = 1, .number = 1, .title = u"One"_s, .artists = {u"A"_s, u"B"_s}, .file = {}});
+    tags.tracks.push_back({.disc = 1, .number = 2, .title = u"Two"_s, .artists = {}, .file = {}});
+
+    const QString json       = Subsonic::createUploadQuery(tags).queryItemValue(u"tags"_s, QUrl::FullyDecoded);
+    const QJsonObject object = QJsonDocument::fromJson(json.toUtf8()).object();
+    EXPECT_FALSE(object.contains("albumArtist"_L1));
+    const QJsonArray tracks = object.value("track"_L1).toArray();
+    EXPECT_EQ((QJsonArray{u"A"_s, u"B"_s}), tracks.at(0).toObject().value("artists"_L1).toArray());
+    EXPECT_FALSE(tracks.at(0).toObject().contains("artist"_L1));
+    EXPECT_FALSE(tracks.at(1).toObject().contains("artists"_L1));
 }
 
 TEST(SubsonicUploadTagsTest, NumbersTracksWhoseNumbersAreMissingOrRepeat)

@@ -223,8 +223,9 @@ void handleReply(QNetworkReply* reply, QObject* context, ResponseCallback callba
         if(response.value("status"_L1).toString() != "ok"_L1) {
             const QJsonObject error = response.value("error"_L1).toObject();
             const QString message   = error.value("message"_L1).toString();
-            callback({}, {.code    = error.value("code"_L1).toInt(-1),
-                          .message = message.isEmpty() ? u"Invalid server response"_s : message});
+            callback({}, {.code      = error.value("code"_L1).toInt(-1),
+                          .message   = message.isEmpty() ? u"Invalid server response"_s : message,
+                          .duplicate = error.value("duplicate"_L1).toBool()});
             return;
         }
 

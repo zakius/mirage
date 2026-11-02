@@ -61,6 +61,23 @@ enum Column : uint8_t
 };
 
 //! The folder in mirage's cache that holds ripped CDs until they are uploaded.
+//! The artist cell lists a track's artists separated by "; ".
+QString joinedArtists(const QStringList& artists)
+{
+    return artists.join(u"; "_s);
+}
+
+QStringList splitArtists(const QString& text)
+{
+    QStringList artists;
+    for(const QString& artist : text.split(u';')) {
+        if(const QString name = artist.trimmed(); !name.isEmpty()) {
+            artists.append(name);
+        }
+    }
+    return artists;
+}
+
 QString uploadsFolder()
 {
     return Fooyin::Utils::cachePath(u"uploads"_s);
@@ -304,7 +321,7 @@ void UploadDialog::addTracks(const UploadTags& tags)
         m_tracks->setItem(row, Disc, new QTableWidgetItem(QString::number(track.disc)));
         m_tracks->setItem(row, Number, new QTableWidgetItem(QString::number(track.number)));
         m_tracks->setItem(row, Title, new QTableWidgetItem(track.title));
-        m_tracks->setItem(row, Artist, new QTableWidgetItem(track.artist));
+        m_tracks->setItem(row, Artist, new QTableWidgetItem(joinedArtists(track.artists)));
         auto* file = new QTableWidgetItem(QFileInfo{track.file}.fileName());
         file->setData(Qt::UserRole, track.file);
         file->setFlags(file->flags() & ~Qt::ItemIsEditable);
@@ -385,7 +402,7 @@ void UploadDialog::releaseChanged()
         const auto track = std::ranges::find(release.tracks, number, &UploadTrack::number);
         if(track != release.tracks.cend()) {
             m_tracks->item(row, Title)->setText(track->title);
-            m_tracks->item(row, Artist)->setText(track->artist);
+            m_tracks->item(row, Artist)->setText(joinedArtists(track->artists));
         }
     }
 }
@@ -411,11 +428,11 @@ std::optional<UploadTags> UploadDialog::tagsFromForm()
 
     std::set<std::pair<int, int>> slots;
     for(int row{0}; row < m_tracks->rowCount(); ++row) {
-        const UploadTrack track{.disc   = m_tracks->item(row, Disc)->text().toInt(),
-                                .number = m_tracks->item(row, Number)->text().toInt(),
-                                .title  = m_tracks->item(row, Title)->text().trimmed(),
-                                .artist = m_tracks->item(row, Artist)->text().trimmed(),
-                                .file   = m_tracks->item(row, File)->data(Qt::UserRole).toString()};
+        const UploadTrack track{.disc    = m_tracks->item(row, Disc)->text().toInt(),
+                                .number  = m_tracks->item(row, Number)->text().toInt(),
+                                .title   = m_tracks->item(row, Title)->text().trimmed(),
+                                .artists = splitArtists(m_tracks->item(row, Artist)->text()),
+                                .file    = m_tracks->item(row, File)->data(Qt::UserRole).toString()};
         if(track.disc < 1 || track.number < 1) {
             setStatus(tr("Row %1 needs a disc and track number of 1 or more.").arg(row + 1));
             return {};

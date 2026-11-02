@@ -266,11 +266,12 @@ Subsonic API documentation.
     the tags from MusicBrainz (`createUpload` with `releaseId` and `disc`). Upload rips each track to FLAC with fooyin's
     converter into `<cache>/uploads/<uuid>`, verified with AccurateRip where the disc is known there (the result is
     shown as in fooyin; a mismatch asks before uploading).
-  - Then `createUpload` (the release, or `tags` JSON), `uploadTrack` for each slot the server expects in 4 MiB chunks
+  - Then `createUpload` (the release, or `tags` JSON with each track's `artists` as an array, which the table's
+    artist cell separates with "; ", and no `albumArtist` when it is empty), `uploadTrack` for each slot the server expects in 4 MiB chunks
     with progress, and `commitUpload`. A chunk that fails on the network is resumed from what `getUpload` reports, three
     times in a row at most. Other errors stop the upload and show the server's message, with Retry, which reads
     `getUpload` first (the server drops a file that fails its format check) and continues. Only "already in the library"
-    offers Replace (`replace=true`) instead. Cancel, or closing the dialog, sends `cancelUpload`. The rip folder is
+    (the error's `duplicate` flag) offers Replace (`replace=true`) instead. Cancel, or closing the dialog, sends `cancelUpload`. The rip folder is
     deleted after the commit or cancel, and leftovers of a crash at the next start. After the commit the server's
     library is refreshed, so the album appears.
   - The audio CD plugin offers this through `Cdda::DiscRipper` (`plugins/cdda/cddadiscripper.h`), registered with

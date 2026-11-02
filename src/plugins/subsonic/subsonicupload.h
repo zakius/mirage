@@ -33,7 +33,7 @@ struct UploadTrack
     int disc{1};
     int number{0};
     QString title;
-    QString artist;
+    QStringList artists;
     QString file;
 };
 
@@ -85,7 +85,8 @@ struct DiscRelease
 [[nodiscard]] QUrlQuery lookupDiscQuery(const QString& discId, const QString& toc);
 //! Reads the releases of a `lookupDisc` response, best match first.
 [[nodiscard]] std::vector<DiscRelease> discReleases(const QJsonObject& response);
-//! True if @p error is commitUpload's "already in the library", the one refusal that `replace=true` overrides.
+//! True if @p error is commitUpload's "already in the library" (its `duplicate` flag), the one refusal that
+//! `replace=true` overrides.
 [[nodiscard]] bool isDuplicateError(const ApiError& error);
 
 /*!

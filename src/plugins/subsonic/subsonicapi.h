@@ -56,6 +56,8 @@ struct ApiError
     //! Subsonic error code, or -1 for network and protocol errors.
     int code{-1};
     QString message;
+    //! The error object's `duplicate` flag: commitUpload's "already in the library" (extension `upload`).
+    bool duplicate{false};
 };
 
 //! Receives the "subsonic-response" object of a successful call, or std::nullopt and the error.
