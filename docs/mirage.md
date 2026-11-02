@@ -190,24 +190,39 @@ Subsonic API documentation.
   lines. The request is signed by the provider: `resolveUrl()` maps `<library path>/rest/<method>?<params>` to an
   authenticated API URL. The server holds the track's own lyrics, so the source counts as local: it runs without
   fooyin's automatic search, after lyrics files and embedded tags (which win), before lyrics services, and its lyrics
-  are not saved back. With the `romanization` extension and the display option set to romanized or both, it asks
+  are not saved back. With the `romanization` extension and the name display set to romanized or both, it asks
   `enhanced=true` and `kinds=pronunciation` or `kinds=main,pronunciation`, and shows the `pronunciation` entry, or each
-  of its lines after the matching `main` line. `cueLine` word timing becomes enhanced LRC word timestamps. Entries are
-  picked by `kind`, so a server that ignores `kinds` works too, and a song without a pronunciation entry shows its main
-  lyrics. A positive `offset` shows the lyrics sooner, as in LRC.
+  of its lines after the matching `main` line. `cueLine` word timing becomes enhanced LRC word timestamps: each word runs
+  from its cue's `byteStart` to the next cue's in the line's text, so spaces and text between cues stay, and a word's
+  leading space ends the word before (the LRC parser drops spaces right after a word timestamp). Entries are picked by
+  `kind`, so a server that ignores `kinds` works too, and a song without a pronunciation entry shows its main lyrics. A
+  positive `offset` shows the lyrics sooner, as in LRC. When the name display changes, the playing track's lyrics are
+  searched again, so the layers switch at once.
 - **Romanized names.** If `getOpenSubsonicExtensions` lists `romanization` v1 (asked when an account loads, is saved
-  and syncs), sync, search and `getPlaylist` send `romanization=both`. The `…Latin` fields of songs become extra tags:
-  `TITLELATIN`, `ALBUMLATIN`, `ARTISTLATIN` (from `artists[].nameLatin`, or `artistLatin`), `TRACKARTISTLATIN`
-  (the artists that `%trackartist%` lists) and `ALBUMARTISTLATIN` (from `albumArtists[].nameLatin`, or
-  `displayAlbumArtistLatin`). They are set only where the server sends them. The core script function
-  `$display_name(original,romanized)` shows a name as the Subsonic page's "Show names and lyrics" option says
-  (original, romanized, or "original (romanized)"); a missing romanized form shows the original. It lives in core
-  (`core/scripting/displayname.h`), so the default views keep their names with the plugin disabled; the plugin owns
-  the option and passes it to `Scripting::setNameDisplay()`, and without the plugin the function shows the original. The default library
-  tree groupings, playlist presets and columns, and window title use it (`[mirage]` commits), for example
-  `$display_name(%title%,%titlelatin%)`. The default filters do not, because they split multi-value artists. Changing the option refreshes the library tracks that have romanized names.
-  The option is disabled, with a hint, while no server lists the extension. Server playlist names, `displayComposer`
-  and album and artist objects are not used, because the plugin does not show them.
+  and syncs), sync, search and `getPlaylist` send `romanization=both`. The `…Latin` fields of songs become extra tags,
+  named in `core/scripting/displayname.h`: `TITLELATIN`, `ALBUMLATIN`, `ARTISTLATIN` (one name per artist from
+  `artists[].nameLatin`, an artist without one keeping its name; or `artistLatin`), `TRACKARTISTLATIN` (the artists that
+  `%trackartist%` lists) and `ALBUMARTISTLATIN` (from `albumArtists[].nameLatin`, or `displayAlbumArtistLatin`). They
+  are set only where the server sends them.
+  - *Display.* The core script function `$display_name(original,romanized)` shows a name as the name display says:
+    original, romanized, or "original (romanized)"; a missing romanized form shows the original. Given multiple values
+    (`%<artist>%`), it pairs them one by one, so each artist keeps its own romanized name; a romanized tag that is
+    missing counts as missing even where scripts show missing variables as "?" (filters). `trackDisplayNames()` gives a
+    track's title, album, artists and album artists the same way, for places that show names without a script.
+  - *The setting* (`Subsonic/NameDisplay`, a key kept from when the Subsonic page owned it) is created and applied by
+    the core, so views and plugins subscribe to it and the default views keep their names with the plugin disabled.
+    The plugin offers it as Interface > Names and Lyrics and as View > Names and Lyrics (Original, Romanized, Original
+    and romanized; the menu applies at once). Both exist only while a server has the extension
+    (`SettingsPage::setHidden()`, which the open settings dialog follows): a server without it shows nothing, and they
+    appear when such a server loads or is added and go away when the last one is removed. A change refreshes the
+    library tracks that have romanized names, so every view shows the new names without a resync.
+  - *Where names follow it* (`[mirage]` defaults, `[mpris,mediacontrol]`): playlist columns and presets, library tree
+    groupings, the default filters (album artist, artist, album, each artist on its own), filter expansion rows, the
+    queue, search results (library and server tracks use the playlist columns), the window title, the now-playing text
+    output, notifications, Discord presence, MPRIS metadata and the Windows media controls. The library search's and
+    playlist search's default scripts also match the romanized tags, whatever the display. Sorting stays by the original
+    names. Server playlist names, `displayComposer` and album and artist objects are not used, because the plugin does
+    not show them.
 - **Ratings and stars.** On `tracksStatsChanged`: a rating change calls `setRating`, rounded to 1–5 stars, or 0 to
   clear. A love change calls `star` or `unstar`.
 - **Playlists.** After each sync, `getPlaylists` and `getPlaylist` for each one. Each server playlist becomes a fooyin
@@ -318,7 +333,8 @@ code stays, so rebasing on fooyin stays cheap and a feature comes back by removi
   `share/mirage`, desktop file, metainfo and icons as `io.github.zakius.mirage`, so it installs next to fooyin), and
   Subsonic-only libraries (`LibraryManager` refuses folder
   paths; the library settings page hides folder settings and sends "Add" to the Subsonic page), and the `[mirage]`
-  commits that hide local media (see "Local media"), a `[gui]` and a `[cdda]` commit for ripping a CD to a server, and
+  commits that hide local media (see "Local media"), a `[gui]` and a `[cdda]` commit for ripping a CD to a server, the `[core]`, `[utils]`, `[lyrics]` and
+  `[mpris,mediacontrol]` commits for romanized names (see "Romanized names"), and
   the `[ci]` workflow. Rebase it when the API branch changes.
 
 ## Order of work
@@ -450,6 +466,22 @@ Verified on 2026-11-02 with the x64 installer from CI, in a Windows 11 LTSC VM, 
 - File has "Upload to Server…" and no "Rip CD to Server…"; uploading a two-track folder through the Windows folder
   dialog commits it and the library shows it.
 
+Verified on 2026-11-02 against two isolated oasis master instances (one with `romanization`, one with it taken out of
+the extension list) and a generated library (Japanese, Chinese, a track with three artists, a Latin one; `.lrc` files
+with word timing), in an isolated profile on Xvfb with output to ALSA's `null` device at zero volume:
+
+- With no server, or only the server without the extension, there is no Interface > Names and Lyrics and no View >
+  Names and Lyrics, and everything shows the original names, the filters splitting the three artists.
+- Adding the server with the extension shows the page in the open settings dialog and the menu; removing it hides both
+  again, in the open dialog too. The choice survives a restart.
+- Each mode, switched from the View menu while a track is paused, changes at once: filters (each artist with its own
+  romanized name, names without one unchanged), library tree, playlist, window title, MPRIS metadata and the lyrics.
+  Notifications (through the desktop portal) were checked in "Romanized" and "Original and romanized", library search
+  results in "Original" and "Romanized"; a search for "kakeru" or "qing" finds the songs in both.
+- Lyrics: "Romanized" shows the `pronunciation` lines with oasis's `cueLine` word timing (paused at 0:09.5, "sora ga"
+  is the current word); "Original and romanized" shows each main line and its romanization, both word-timed; "Original"
+  asks songLyrics v1 and shows the main lines.
+
 Limits:
 
 - New playlists go to the default server. Moving a playlist to another server is not supported.
@@ -458,8 +490,8 @@ Limits:
   sent.
 - A playlist removal that fails is forgotten on restart, and the playlist comes back on the next sync.
 - Playlist conflicts resolve by last write.
-- Lyrics already shown for the playing track keep their layers when the display option changes, until they are
-  searched again.
+- In "Original and romanized", a column of several artists shows them joined, then all romanized forms in
+  parentheses ("A, B (a, B)"); the filters list them one by one.
 - Changing the name display option rewrites the database rows of the affected tracks (with unchanged values), because
   that is how views learn that their names changed.
 - An upload resumes only within the dialog's lifetime; closing it cancels the upload.
