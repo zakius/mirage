@@ -19,6 +19,9 @@
 
 #include <core/scripting/displayname.h>
 
+#include <core/constants.h>
+#include <core/track.h>
+
 #include <atomic>
 
 using namespace Qt::StringLiterals;
@@ -29,12 +32,48 @@ std::atomic<Fooyin::Scripting::NameDisplay> currentDisplay{Fooyin::Scripting::Na
 } // namespace
 
 namespace Fooyin::Scripting {
-QString displayName(const QString& original, const QString& romanized, NameDisplay display)
+namespace {
+QString singleName(const QString& original, const QString& romanized, NameDisplay display)
 {
     if(original.isEmpty() || romanized.isEmpty() || romanized == original || display == NameDisplay::Original) {
         return original;
     }
     return display == NameDisplay::Romanized ? romanized : u"%1 (%2)"_s.arg(original, romanized);
+}
+} // namespace
+
+QString displayName(const QString& original, const QString& romanized, NameDisplay display)
+{
+    static const QLatin1StringView separator{Constants::UnitSeparator};
+    if(!original.contains(separator)) {
+        return singleName(original, romanized, display);
+    }
+    return displayNames(original.split(separator), romanized.split(separator), display).join(separator);
+}
+
+QStringList displayNames(const QStringList& originals, const QStringList& romanized, NameDisplay display)
+{
+    if(romanized.size() != originals.size()) {
+        return originals;
+    }
+    QStringList names;
+    names.reserve(originals.size());
+    for(qsizetype i{0}; i < originals.size(); ++i) {
+        names.append(singleName(originals.at(i), romanized.at(i), display));
+    }
+    return names;
+}
+
+TrackDisplayNames trackDisplayNames(const Track& track)
+{
+    const NameDisplay display = nameDisplay();
+    const auto tag = [&track](const char* name) {
+        return track.extraTag(QString::fromLatin1(name));
+    };
+    return {.title        = singleName(track.effectiveTitle(), tag(TitleLatinTag).value(0), display),
+            .album        = singleName(track.album(), tag(AlbumLatinTag).value(0), display),
+            .artists      = displayNames(track.artists(), tag(ArtistLatinTag), display),
+            .albumArtists = displayNames(track.albumArtists(), tag(AlbumArtistLatinTag), display)};
 }
 
 void setNameDisplay(NameDisplay display)

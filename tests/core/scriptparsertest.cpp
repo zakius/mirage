@@ -324,6 +324,69 @@ TEST_F(ScriptParserTest, DisplayNameTest)
     EXPECT_EQ(u"東京事変", m_parser.evaluate(u"$display_name(東京事変,Tokyo Jihen)"_s));
 }
 
+TEST_F(ScriptParserTest, DisplayNamePairsMultipleValues)
+{
+    using Scripting::NameDisplay;
+
+    Track track;
+    track.setTitle(u"晴天"_s);
+    track.setAlbum(u"葉惠美"_s);
+    track.setArtists({u"周杰倫"_s, u"Lara"_s, u"宇多田ヒカル"_s});
+    track.setAlbumArtists({u"周杰倫"_s});
+    track.addExtraTag(u"TITLELATIN"_s, u"Qing Tian"_s);
+    track.addExtraTag(u"ARTISTLATIN"_s, QStringList{u"Zhou Jielun"_s, u"Lara"_s, u"Utada Hikaru"_s});
+
+    // Filters split %<artist>%, so each artist keeps its own romanized name
+    const QString script = u"$display_name(%<artist>%,%<artistlatin>%)"_s;
+    EXPECT_EQ(u"周杰倫\037Lara\037宇多田ヒカル", m_parser.evaluate(script, track));
+
+    Scripting::setNameDisplay(NameDisplay::Romanized);
+    EXPECT_EQ(u"Zhou Jielun\037Lara\037Utada Hikaru", m_parser.evaluate(script, track));
+    // Without a romanized name per artist, the originals stay
+    EXPECT_EQ(u"周杰倫\037Lara\037宇多田ヒカル", m_parser.evaluate(u"$display_name(%<artist>%,Zhou Jielun)"_s, track));
+    // Album artists have no romanized names here
+    EXPECT_EQ(u"周杰倫", m_parser.evaluate(u"$display_name(%<albumartist>%,%<albumartistlatin>%)"_s, track));
+    // Filters show missing variables as "?", which is no romanized name
+    const ScriptEvaluationOptions filterOptions{.missingVariableText = u"?"_s};
+    EXPECT_EQ(u"葉惠美",
+              m_parser.evaluate(u"$display_name(%album%,%albumlatin%)"_s, track, ScriptContext{}, filterOptions));
+    EXPECT_EQ(u"周杰倫", m_parser.evaluate(u"$display_name(%<albumartist>%,%<albumartistlatin>%)"_s, track,
+                                           ScriptContext{}, filterOptions));
+
+    auto names = Scripting::trackDisplayNames(track);
+    EXPECT_EQ(u"Qing Tian", names.title);
+    EXPECT_EQ(u"葉惠美", names.album);
+    EXPECT_EQ((QStringList{u"Zhou Jielun"_s, u"Lara"_s, u"Utada Hikaru"_s}), names.artists);
+    EXPECT_EQ(QStringList{u"周杰倫"_s}, names.albumArtists);
+
+    Scripting::setNameDisplay(NameDisplay::Both);
+    EXPECT_EQ(u"周杰倫 (Zhou Jielun)\037Lara\037宇多田ヒカル (Utada Hikaru)", m_parser.evaluate(script, track));
+    names = Scripting::trackDisplayNames(track);
+    EXPECT_EQ(u"晴天 (Qing Tian)", names.title);
+
+    Scripting::setNameDisplay(NameDisplay::Original);
+    EXPECT_EQ(u"晴天", Scripting::trackDisplayNames(track).title);
+}
+
+TEST_F(ScriptParserTest, DefaultSearchFindsRomanizedNames)
+{
+    Track yoru;
+    yoru.setTitle(u"夜に駆ける"_s);
+    yoru.addExtraTag(u"TITLELATIN"_s, u"Yoru ni Kakeru"_s);
+    Track qing;
+    qing.setTitle(u"晴天"_s);
+    qing.setArtists({u"周杰倫"_s});
+    qing.addExtraTag(u"TITLELATIN"_s, u"Qíng Tiān"_s);
+    qing.addExtraTag(u"ARTISTLATIN"_s, u"Zhōu Jié Lún"_s);
+    const TrackList tracks{yoru, qing};
+
+    TrackQueryFilter filter{{.script = QString::fromLatin1(TrackQueryFilter::DefaultSearchScript),
+                             .mode   = ScriptSearchMode::MatchWordBeginnings}};
+    EXPECT_EQ(1, filter.filter(u"kakeru"_s, tracks).size());
+    EXPECT_EQ(1, filter.filter(u"qing zhou"_s, tracks).size());
+    EXPECT_EQ(1, filter.filter(u"晴天"_s, tracks).size());
+}
+
 TEST_F(ScriptParserTest, ApplicationLinkTest)
 {
     EXPECT_EQ(uR"(<a href="fooyin://application/run?application=player">Player</a>)",

@@ -692,10 +692,15 @@ void ScriptRegistryPrivate::addDefaultFunctions()
     addFunction(u"ascii"_s, u"$ascii(text)"_s, QT_TRANSLATE_NOOP("Fooyin", "String"),
                 QT_TRANSLATE_NOOP("Fooyin", "Converts text to ASCII"), makeScriptFunctionInvoker<Scripting::ascii>());
     addFunction(u"display_name"_s, u"$display_name(original,romanized)"_s, QT_TRANSLATE_NOOP("Fooyin", "String"),
-                QT_TRANSLATE_NOOP("Fooyin", "Shows a name as original, romanized or both, as set on the Subsonic "
-                                            "settings page; without a romanized form, shows the original"),
-                makeScriptFunctionInvoker<[](const QStringList& args) {
-                    return Scripting::displayName(args.value(0), args.value(1), Scripting::nameDisplay());
+                QT_TRANSLATE_NOOP("Fooyin", "Shows a name as original, romanized or both, as set in Interface > "
+                                            "Names and Lyrics; without a romanized form, shows the original"),
+                makeScriptFunctionInvoker<[](const ScriptFunctionCallContext& call) -> ScriptResult {
+                    // A missing romanized tag shows as the missing variable text (filters use "?"), not a name
+                    const QString original  = call.args.empty() ? QString{} : call.args[0].value;
+                    const QString romanized
+                        = call.args.size() > 1 && call.args[1].cond ? call.args[1].value : QString{};
+                    const QString name = Scripting::displayName(original, romanized, Scripting::nameDisplay());
+                    return {.value = name, .cond = !name.isEmpty()};
                 }>());
     addFunction(u"slice"_s, u"$slice(text,start[,end])"_s, QT_TRANSLATE_NOOP("Fooyin", "String"),
                 QT_TRANSLATE_NOOP("Fooyin", "Returns a slice of text"), makeScriptFunctionInvoker<Scripting::slice>());

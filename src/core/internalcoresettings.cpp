@@ -28,6 +28,7 @@
 #include <core/engine/audioformat.h>
 #include <core/engine/enginedefs.h>
 #include <core/network/networkaccessmanager.h>
+#include <core/scripting/displayname.h>
 #include <core/player/playbackqueue.h>
 #include <utils/logging/messagehandler.h>
 #include <utils/settings/settingsmanager.h>
@@ -121,6 +122,12 @@ CoreSettings::CoreSettings(SettingsManager* settingsManager, DbConnectionPoolPtr
     m_settings->createTempSetting<Version>(QString::fromLatin1(VERSION));
     m_settings->createSetting<PlayMode>(0, QString::fromLatin1(PlayModeKey));
     m_settings->createSetting<AutoRefresh>(false, u"Library/AutoRefresh"_s);
+    m_settings->createSetting(QString::fromLatin1(Scripting::NameDisplaySetting), 0);
+    Scripting::setNameDisplay(
+        static_cast<Scripting::NameDisplay>(m_settings->value(Scripting::NameDisplaySetting).toInt()));
+    m_settings->subscribe(Scripting::NameDisplaySetting, m_settings, [](const QVariant& value) {
+        Scripting::setNameDisplay(static_cast<Scripting::NameDisplay>(value.toInt()));
+    });
     m_settings->createSetting<LibrarySortScript>(
         u"%albumartist% - %year% - %album% - $num(%disc%,5) - $num(%track%,5) - %title%"_s, u"Library/SortScript"_s);
     m_settings->createSetting<Settings::Core::AudioOutput>(QString{}, u"Engine/AudioOutput"_s);

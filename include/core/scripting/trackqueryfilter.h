@@ -49,8 +49,10 @@ class FYCORE_EXPORT TrackQueryFilter
 {
 public:
     static constexpr auto DefaultSearchMode   = 0;
+    // Romanized names (see scripting/displayname.h) match too, whatever the name display
     static constexpr auto DefaultSearchScript = "[%artist%] [%title%] [%album%] [%albumartist%] [%performer%] "
-                                                "[%composer%] [%genre%] [%comment%] [%filepath%]";
+                                                "[%composer%] [%genre%] [%comment%] [%filepath%] [%artistlatin%] "
+                                                "[%titlelatin%] [%albumlatin%] [%albumartistlatin%]";
 
     TrackQueryFilter();
     explicit TrackQueryFilter(ScriptSearchOptions options);
