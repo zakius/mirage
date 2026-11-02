@@ -86,7 +86,7 @@ bool isWholeBody(const QNetworkReply* reply)
 void startChunkRequest(const std::shared_ptr<QNetworkAccessManager>& network, const QUrl& url,
                        const std::shared_ptr<RangeStreamState>& state, qint64 chunk)
 {
-    QNetworkRequest request = makeNetworkRequest(url);
+    QNetworkRequest request = apiRequest(url);
     request.setRawHeader("Range", "bytes=" + QByteArray::number(chunk * ChunkSize) + "-"
                                       + QByteArray::number(((chunk + 1) * ChunkSize) - 1));
     // The std::chrono overload needs Qt 6.7

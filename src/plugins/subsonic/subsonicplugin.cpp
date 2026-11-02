@@ -29,6 +29,7 @@
 #include <core/library/librarymanager.h>
 #include <core/library/libraryprovider.h>
 #include <core/library/musiclibrary.h>
+#include <core/network/networkaccessmanager.h>
 #include <core/player/playercontroller.h>
 #include <core/playlist/playlisthandler.h>
 #include <core/scripting/displayname.h>
@@ -43,6 +44,7 @@
 #include <utils/settings/settingsmanager.h>
 #include <utils/utils.h>
 
+#include <QAbstractNetworkCache>
 #include <QAction>
 #include <QActionGroup>
 #include <QDateTime>
@@ -118,6 +120,14 @@ void SubsonicPlugin::initialise(const CorePluginContext& context)
 
     // Rips left by a crash; uploads in progress live only as long as their dialog
     QDir{Utils::cachePath(u"uploads"_s)}.removeRecursively();
+
+    // Builds before 2026-11-02 let API replies, whose URLs carry the credentials, into the disk cache
+    if(!m_settings->fileContains("Subsonic/NetworkCacheCleared"_L1)) {
+        if(auto* cache = m_network->cache()) {
+            cache->clear();
+        }
+        m_settings->fileSet("Subsonic/NetworkCacheCleared"_L1, true);
+    }
 
     m_settings->subscribe(Scripting::NameDisplaySetting, this, [this]() {
         // Views show script results of these tracks, so they are told that their names changed

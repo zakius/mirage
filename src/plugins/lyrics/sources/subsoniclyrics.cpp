@@ -118,7 +118,7 @@ void SubsonicLyrics::get(const QString& method, const QUrlQuery& params,
         return;
     }
 
-    setReply(network()->get(makeNetworkRequest(resolved)));
+    setReply(network()->get(makeNetworkRequest(resolved, NetworkRequestOption::Credentials)));
     QObject::connect(reply(), &QNetworkReply::finished, this, [this, handler]() {
         auto* lyricsReply = reply();
         if(!lyricsReply) {

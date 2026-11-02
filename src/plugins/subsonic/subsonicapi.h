@@ -23,6 +23,7 @@
 #include <core/track.h>
 
 #include <QJsonObject>
+#include <QNetworkRequest>
 #include <QString>
 #include <QUrl>
 #include <QUrlQuery>
@@ -65,6 +66,9 @@ using ResponseCallback = std::function<void(std::optional<QJsonObject> response,
 
 //! Returns the authenticated URL of the API @p method. Each call uses a new salt.
 [[nodiscard]] QUrl apiUrl(const Account& account, const QString& method, QUrlQuery params = {});
+
+//! Returns a request for an API URL, which carries the credentials (NetworkRequestOption::Credentials).
+[[nodiscard]] QNetworkRequest apiRequest(const QUrl& url);
 
 //! Calls the API @p method and invokes @p callback in the thread of @p context.
 QNetworkReply* request(QNetworkAccessManager* network, const Account& account, const QString& method,

@@ -207,6 +207,11 @@ QUrl apiUrl(const Account& account, const QString& method, QUrlQuery params)
     return url;
 }
 
+QNetworkRequest apiRequest(const QUrl& url)
+{
+    return makeNetworkRequest(url, NetworkRequestOption::Credentials);
+}
+
 namespace {
 void handleReply(QNetworkReply* reply, QObject* context, ResponseCallback callback)
 {
@@ -237,7 +242,7 @@ void handleReply(QNetworkReply* reply, QObject* context, ResponseCallback callba
 QNetworkReply* request(QNetworkAccessManager* network, const Account& account, const QString& method,
                        const QUrlQuery& params, QObject* context, ResponseCallback callback)
 {
-    auto* reply = network->get(makeNetworkRequest(apiUrl(account, method, params)));
+    auto* reply = network->get(apiRequest(apiUrl(account, method, params)));
     handleReply(reply, context, std::move(callback));
     return reply;
 }
@@ -245,7 +250,7 @@ QNetworkReply* request(QNetworkAccessManager* network, const Account& account, c
 QNetworkReply* post(QNetworkAccessManager* network, const Account& account, const QString& method,
                     const QUrlQuery& params, const QByteArray& body, QObject* context, ResponseCallback callback)
 {
-    QNetworkRequest networkRequest = makeNetworkRequest(apiUrl(account, method, params));
+    QNetworkRequest networkRequest = apiRequest(apiUrl(account, method, params));
     networkRequest.setHeader(QNetworkRequest::ContentTypeHeader, u"application/octet-stream"_s);
     auto* reply = network->post(networkRequest, body);
     handleReply(reply, context, std::move(callback));
