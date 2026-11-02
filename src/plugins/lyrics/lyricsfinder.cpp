@@ -24,7 +24,6 @@
 #include "settings/lyricssettings.h"
 #include "sources/darklyrics.h"
 #include "sources/kugoulyrics.h"
-#include "sources/locallyrics.h"
 #include "sources/lrcliblyrics.h"
 #include "sources/lyricsource.h"
 #include "sources/neteaselyrics.h"
@@ -203,10 +202,9 @@ void LyricsFinder::reset()
 
 void LyricsFinder::loadDefaults()
 {
-    // Server lyrics follow lyrics files and tags; a saved order without them puts them level with LRCLIB, and the
-    // stable sort keeps them first
-    m_sources = {new LocalLyrics(m_networkManager.get(), m_settings, 0, true, this),
-                 new TagLyrics(m_networkManager.get(), m_settings, 1, true, this),
+    // mirage: no "Local Files" source, which reads lyrics files next to local tracks. Server lyrics follow tags; a
+    // saved order without them puts them level with LRCLIB, and the stable sort keeps them first.
+    m_sources = {new TagLyrics(m_networkManager.get(), m_settings, 1, true, this),
                  new SubsonicLyrics(m_networkManager.get(), m_settings, m_libraryProviders, 2, true, this),
                  new LrcLibLyrics(m_networkManager.get(), m_settings, 3, true, this),
                  new NeteaseLyrics(m_networkManager.get(), m_settings, 4, true, this),

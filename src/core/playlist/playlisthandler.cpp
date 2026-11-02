@@ -1207,6 +1207,20 @@ void PlaylistHandler::handleTracksDeleted(const TrackList& tracks)
     p->regenerateAutoPlaylists(tracks);
 }
 
+void PlaylistHandler::removeLocalFiles()
+{
+    TrackList localFiles;
+    for(const auto& playlist : p->m_playlists) {
+        if(!playlist->isAutoPlaylist()) {
+            std::ranges::copy_if(playlist->tracks(), std::back_inserter(localFiles),
+                                 [](const Track& track) { return !track.isRemote() && !track.isVirtual(); });
+        }
+    }
+    if(!localFiles.empty()) {
+        p->handleTracksDeleted(localFiles);
+    }
+}
+
 void PlaylistHandler::changePlaylistIndex(const UId& id, int index)
 {
     auto* playlist = playlistById(id);

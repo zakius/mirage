@@ -113,6 +113,8 @@ public:
     [[nodiscard]] std::vector<int> deadTrackIndexes(const UId& id) const;
     /** Removes any playlist entries that match the deleted @p tracks. */
     void handleTracksDeleted(const TrackList& tracks);
+    //! mirage: removes entries that are local files, which mirage does not play, as if their tracks were deleted.
+    void removeLocalFiles();
 
     void changePlaylistIndex(const UId& id, int index);
     void changeActivePlaylist(const UId& id);

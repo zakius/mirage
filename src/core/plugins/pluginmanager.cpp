@@ -46,7 +46,10 @@ namespace Fooyin {
 namespace {
 bool isDepreciatedPlugin(const QString& pluginId)
 {
-    return pluginId == "fooyin.filters"_L1;
+    // mirage: plugins for local files are not built; copies left by older builds or installed by hand are ignored
+    static const QStringList localFilePlugins{u"fooyin.fileoperations"_s, u"fooyin.rgscanner"_s,
+                                              u"fooyin.runservices"_s};
+    return pluginId == "fooyin.filters"_L1 || localFilePlugins.contains(pluginId);
 }
 
 QStringList pluginFiles(const QDir& baseDir, bool skipInstallerDirs = false)

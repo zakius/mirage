@@ -45,10 +45,10 @@ set(FOOYIN_KNOWN_PLUGINS
     wavebar
 )
 
+# mirage: File Operations, the ReplayGain scanner and Run Services work on local files, so they are not built
 set(FOOYIN_DEFAULT_PLUGINS
     discord
     equaliser
-    fileops
     flac
     gme
     globalhotkeys
@@ -63,8 +63,6 @@ set(FOOYIN_DEFAULT_PLUGINS
     projectm
     rawaudio
     radiobrowser
-    runservices
-    rgscanner
     scrobbler
     sdl
     sleepinhibitor

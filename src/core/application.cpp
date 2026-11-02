@@ -155,6 +155,8 @@ Application::Application(QObject* parent)
     QObject::connect(
         m_playlistHandler, &PlaylistHandler::playlistsPopulated, this,
         [this]() {
+            // mirage: local files in playlists from older builds are removed, as mirage plays servers only
+            m_playlistHandler->removeLocalFiles();
             if(m_settings->value<Settings::Core::ClearPlaybackQueueOnStartup>()) {
                 m_playbackQueueStore.save(PlaybackQueue{});
                 return;

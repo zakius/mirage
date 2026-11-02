@@ -86,8 +86,8 @@ LyricsSourcesPageWidget::LyricsSourcesPageWidget(LyricsFinder* lyricsFinder, Set
     layout->addWidget(new HintLabel(tr("Lyrics will be searched for in the above order."), this), row++, 0);
     layout->addWidget(new QLabel(tr("Metadata tags") + ":"_L1, this), row++, 0);
     layout->addWidget(m_lyricTags, row++, 0);
-    layout->addWidget(new QLabel(tr("Local files") + ":"_L1, this), row++, 0);
-    layout->addWidget(m_lyricPaths, row++, 0);
+    // mirage: there is no "Local Files" source, so its search paths are not offered
+    m_lyricPaths->hide();
 }
 
 void LyricsSourcesPageWidget::load()

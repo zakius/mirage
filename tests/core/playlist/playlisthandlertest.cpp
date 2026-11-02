@@ -445,4 +445,25 @@ TEST(PlaylistHandlerTest, DeletedTracksAreRemovedFromAllPlaylists)
     ASSERT_EQ(secondPlaylist->trackCount(), 1);
     EXPECT_EQ(secondPlaylist->tracks().front().identityKey(), retainedTrack.identityKey());
 }
+
+TEST(PlaylistHandlerTest, RemovesLocalFilesFromPlaylists)
+{
+    ensureCoreApplication();
+    SettingsManager settings{QDir::tempPath() + u"/fooyin_playlisthandler_local_files_test.ini"_s};
+    registerCoreSettings(settings);
+    PlaylistHandlerHarness harness{settings};
+    ASSERT_TRUE(harness.dbInitialised);
+
+    const Track local  = makeTrack(u"/music/local.flac"_s, 1);
+    const Track server = makeTrack(u"subsonic://alice@music.test/song/1"_s, 2);
+    const Track stream = makeTrack(u"https://radio.example.org/live"_s, 3);
+    auto* playlist     = harness.handler.createPlaylist(u"Mixed"_s, {local, server, stream});
+    ASSERT_NE(playlist, nullptr);
+
+    harness.handler.removeLocalFiles();
+
+    ASSERT_EQ(2, playlist->trackCount());
+    EXPECT_EQ(server.identityKey(), playlist->tracks().at(0).identityKey());
+    EXPECT_EQ(stream.identityKey(), playlist->tracks().at(1).identityKey());
+}
 } // namespace Fooyin::Testing

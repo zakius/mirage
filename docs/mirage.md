@@ -239,7 +239,7 @@ Subsonic API documentation.
   A playlist with edits the server has not saved is marked with a `SubsonicUnsaved` extra property, so the mark
   survives a restart. A sync does not overwrite it, and the push is retried after the next sync. Removals that fail are
   retried on the next sync in the same session. When a sync applies the server's entries, entries the server cannot
-  hold (local files, tracks from other servers) keep their place. Songs that are not in the library (for example
+  hold (streams, tracks from other servers) keep their place. Songs that are not in the library (for example
   oasis's radio tracks) are kept as they are, so a push sends them back. Changes that only refresh the metadata of
   entries, as after a sync, are not edits. The last write wins. Removing a mirrored playlist asks for confirmation
   (unless turned off), and the dialog says that the server copy is deleted too.
@@ -328,16 +328,20 @@ code stays, so rebasing on fooyin stays cheap and a feature comes back by removi
   desktop file has no `%F` and no MIME types, and drags from other applications that carry local files are refused.
   Drags that start inside mirage (library tree nodes and tracks into playlists, between playlists and to the queue)
   work as in fooyin, and plugin packages can still be dropped onto the plugins page.
-- **Plugins off by default.** File Operations, the ReplayGain scanner and Run Services are in the default
-  `Plugins/Disabled` list and can be turned on in Settings > Plugins. The tag editor, quick tagger and cdda plugins
+- **Plugins not built.** File Operations, the ReplayGain scanner and Run Services are left out of the default plugin
+  selection, so packages do not ship them, and the plugin manager ignores copies of them (left by an older install, or
+  installed by hand), so Settings > Plugins does not list them. The tag editor, quick tagger and cdda plugins
   stay loaded; their actions are hidden by the gate. The cdda plugin serves "Rip CD to Server…" (see "Upload and CD
   rip").
 - **Folder libraries from older builds** stay in the database. `Application` calls
   `LibraryManager::setProvidersOnly(true)`, which hides them and their tracks; they are not scanned or monitored.
 - **Opened for uploads only:** reading local files' tags and ripping a CD, inside the upload dialog.
+- **Lyrics.** The lyrics plugin has no "Local Files" source (lyrics files next to tracks), and its Sources page has no
+  search paths for it.
+- **Local files in playlists** from older builds are removed from the playlists when they load, as if their tracks
+  were deleted (which is not an edit sent to a server). Streams and server tracks stay.
 - **Not hidden:** Add stream URL, waveform data (Utilities; it decodes the stream into mirage's own cache), layout,
-  theme and preset import and export, the plugin installer, and the now-playing text output. Local tracks already in
-  playlists from older builds stay and play.
+  theme and preset import and export, the plugin installer, and the now-playing text output.
 
 ## Branches
 
@@ -501,7 +505,7 @@ Limits:
 
 - New playlists go to the default server. Moving a playlist to another server is not supported.
 - Autoplaylists stay local (not tested end to end).
-- Tracks that are not on the playlist's server (local files, other servers) stay in the fooyin playlist but are not
+- Tracks that are not on the playlist's server (streams, other servers) stay in the fooyin playlist but are not
   sent.
 - A playlist removal that fails is forgotten on restart, and the playlist comes back on the next sync.
 - Playlist conflicts resolve by last write.
