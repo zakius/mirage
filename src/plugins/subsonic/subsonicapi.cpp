@@ -209,7 +209,8 @@ QUrl apiUrl(const Account& account, const QString& method, QUrlQuery params)
         path.append('/'_L1);
     }
     url.setPath(path + u"rest/"_s + method);
-    url.setQuery(params);
+    // QUrlQuery leaves "+" as it is, which servers read as a space
+    url.setQuery(params.toString(QUrl::FullyEncoded).replace(u'+', "%2B"_L1), QUrl::StrictMode);
     return url;
 }
 

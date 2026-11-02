@@ -165,4 +165,15 @@ TEST(SubsonicApiTest, ServerAddressesWithoutASchemeUseHttps)
     EXPECT_EQ(QUrl{u"http://192.168.1.2:4533"_s}, Subsonic::serverUrl(u"http://192.168.1.2:4533"_s));
     EXPECT_TRUE(Subsonic::serverUrl(u""_s).isEmpty());
 }
+
+TEST(SubsonicApiTest, SendsAPlusAsAPlus)
+{
+    QUrlQuery params;
+    params.addQueryItem(u"name"_s, u"Rock + Roll & more"_s);
+    const QUrl url = Subsonic::apiUrl({.url = QUrl{u"https://music.test"_s}, .username = u"a+b"_s}, u"createPlaylist"_s,
+                                      params);
+    EXPECT_TRUE(url.query(QUrl::FullyEncoded).contains("name=Rock%20%2B%20Roll%20%26%20more"_L1));
+    EXPECT_TRUE(url.query(QUrl::FullyEncoded).contains("u=a%2Bb"_L1));
+    EXPECT_EQ(u"Rock + Roll & more"_s, QUrlQuery{url}.queryItemValue(u"name"_s, QUrl::FullyDecoded));
+}
 } // namespace Fooyin::Testing
