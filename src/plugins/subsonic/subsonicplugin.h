@@ -67,7 +67,9 @@ private:
     void updateServerActions();
     UploadDialog* createUploadDialog(const QString& libraryPath);
     //! Starts a radio from the selected @p tracks: their album if they share one, else their artist, else the first.
-    void startRadio(const TrackList& tracks);
+    void startRadio(const TrackList& tracks, const QString& source = {});
+    //! Fills Playback > Start Station with the stations of the first server that has any.
+    void updateStations();
     //! Stars or unstars the albums, or artists, with the server ids @p ids on the server of @p server.
     void star(const QString& server, const QStringList& ids, bool album, bool starred);
     void scrobble(const Track& track, bool submission);
@@ -87,5 +89,9 @@ private:
     NameDisplayPage* m_nameDisplayPage{nullptr};
     //! View > Names and Lyrics, owned by the View menu.
     QMenu* m_nameDisplayMenu{nullptr};
+    //! Playback > Start Station, for servers with oasis stations.
+    QMenu* m_stationMenu{nullptr};
+    //! View > Show Lyrics Translations, for servers whose lyrics may carry translations.
+    QAction* m_translationAction{nullptr};
 };
 } // namespace Fooyin::Subsonic

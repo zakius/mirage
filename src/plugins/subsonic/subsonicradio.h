@@ -37,7 +37,8 @@ class SubsonicProvider;
 
 /*!
  * Plays a server's similar songs (getSimilarSongs) as a temporary playlist, topped up from its last song while it
- * plays. One radio runs at a time; starting another replaces it.
+ * plays, or an oasis station, a radio playlist the server refills. One radio runs at a time; starting another
+ * replaces it.
  */
 class Radio : public QObject
 {
@@ -49,9 +50,12 @@ public:
 
     /*!
      * Starts a radio on the server of @p server from the song, album or artist with the server id @p seedId, named
-     * after @p name. @p first, if valid, plays first.
+     * after @p name. @p first, if valid, plays first. @p source picks an oasis radio source (extension `oasis` v2).
      */
-    void start(const QString& server, const QString& seedId, const QString& name, const Track& first = {});
+    void start(const QString& server, const QString& seedId, const QString& name, const Track& first = {},
+               const QString& source = {});
+    //! Starts the oasis station @p station, over @p period for one that takes a period, named @p name.
+    void startStation(const QString& server, const QString& station, const QString& period, const QString& name);
 
 Q_SIGNALS:
     //! Emitted when a radio could not start, with the reason to show.
@@ -59,6 +63,10 @@ Q_SIGNALS:
 
 private:
     void topUp(const PlaylistTrack& current);
+    //! Replaces the running radio with one playing @p tracks as @p name.
+    void play(const QString& name, const TrackList& tracks);
+    //! Ends the running radio, removing its station playlist from the server.
+    void stop();
     //! Keeps the songs of @p tracks the radio hasn't played or queued yet.
     TrackList unseen(const TrackList& tracks);
 
@@ -69,6 +77,10 @@ private:
     struct Station
     {
         QString server;
+        //! The oasis radio source, if one was picked.
+        QString source;
+        //! The server's playlist of a station, which it refills as songs play.
+        QString stationId;
         UId playlistId;
         std::set<QString> songIds;
         bool fetching{false};

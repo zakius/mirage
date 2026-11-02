@@ -67,6 +67,7 @@ LyricsPlaybackService::LyricsPlaybackService(const CorePluginContext& core, Lyri
                      [this](const Track& track) { updateTrack(track, true); });
     // Server lyrics come with the romanized lines the name display asks for
     m_settings->subscribe(Scripting::NameDisplaySetting, this, &LyricsPlaybackService::reloadLyrics);
+    m_settings->subscribe(Scripting::LyricsTranslationSetting, this, &LyricsPlaybackService::reloadLyrics);
     QObject::connect(m_player, &PlayerController::positionChanged, this, &LyricsPlaybackService::updateCurrentLine);
     QObject::connect(m_player, &PlayerController::positionMoved, this, &LyricsPlaybackService::updateCurrentLine);
     QObject::connect(m_player, &PlayerController::playStateChanged, this, &LyricsPlaybackService::updateCurrentLine);

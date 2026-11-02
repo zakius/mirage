@@ -114,7 +114,7 @@ std::optional<uint64_t> lineStart(const QJsonObject& entry, qsizetype index)
 } // namespace
 
 namespace Fooyin::Lyrics {
-QString structuredLyricsToLrc(const QJsonArray& structuredLyrics, LyricsLayers layers)
+QString structuredLyricsToLrc(const QJsonArray& structuredLyrics, LyricsLayers layers, bool translation)
 {
     const QJsonObject main          = entryOfKind(structuredLyrics, "main"_L1);
     const QJsonObject pronunciation = entryOfKind(structuredLyrics, "pronunciation"_L1);
@@ -140,11 +140,26 @@ QString structuredLyricsToLrc(const QJsonArray& structuredLyrics, LyricsLayers l
     const auto text              = [](const QJsonArray& lines, qsizetype i) {
         return lines.at(i).toObject().value("value"_L1).toString().simplified();
     };
+    // Translations have one line per main line, empty where a line has none
+    QJsonArray translationLines;
+    if(translation) {
+        for(const auto& value : structuredLyrics) {
+            const QJsonObject candidate = value.toObject();
+            if(candidate.value("kind"_L1).toString() == "translation"_L1
+               && (translationLines.isEmpty() || candidate.value("oasisMachineTranslation"_L1).toBool())) {
+                translationLines = candidate.value("line"_L1).toArray();
+            }
+        }
+    }
     for(qsizetype i{0}; i < entryLines.size(); ++i) {
         const auto start = lineStart(entry, i);
         lines.append(lrcLine(entry, i, start));
         if(i < pairedLines.size() && text(pairedLines, i).compare(text(entryLines, i), Qt::CaseInsensitive) != 0) {
             lines.append(lrcLine(paired, i, start));
+        }
+        if(const QString translated = i < translationLines.size() ? text(translationLines, i) : QString{};
+           !translated.isEmpty() && translated.compare(text(entryLines, i), Qt::CaseInsensitive) != 0) {
+            lines.append(start ? u"[%1]%2"_s.arg(formatTimestamp(*start), translated) : translated);
         }
     }
 

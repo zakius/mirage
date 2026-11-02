@@ -40,7 +40,10 @@ enum class LyricsLayers : uint8_t
  * With @p layers asking for it, the `pronunciation` entry is shown instead, or after each main line, paired by line
  * index. Its `cueLine` word timing becomes enhanced LRC word timestamps. Without a pronunciation entry, the main
  * lyrics are shown.
+ *
+ * With @p translation, each line is followed by its line of a `translation` entry: oasis's machine translation into
+ * the user's language if there is one, else the first.
  */
 [[nodiscard]] QString structuredLyricsToLrc(const QJsonArray& structuredLyrics,
-                                            LyricsLayers layers = LyricsLayers::Main);
+                                            LyricsLayers layers = LyricsLayers::Main, bool translation = false);
 } // namespace Fooyin::Lyrics

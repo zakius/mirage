@@ -111,6 +111,25 @@ void setStarred(Track& track, const char* tag, bool starred);
 //! Sets the album and artist starred tags of @p tracks from a getStarred2 response.
 void markStarred(TrackList& tracks, const QJsonObject& getStarred2Response);
 
+//! A radio source or station oasis offers (extension `oasis` v2).
+struct RadioOption
+{
+    QString id;
+    QString name;
+    //! For a station of top tracks, the periods it covers, as Last.fm names them.
+    QStringList periods;
+    QString defaultPeriod;
+};
+
+struct RadioOptions
+{
+    std::vector<RadioOption> sources;
+    std::vector<RadioOption> stations;
+};
+
+//! Returns the radio sources and stations of an `oasisRadio` response.
+[[nodiscard]] RadioOptions radioOptions(const QJsonObject& response);
+
 //! Returns the songs of a getSimilarSongs or getSimilarSongs2 response as tracks of the library at @p libraryPath.
 [[nodiscard]] TrackList similarSongs(const QJsonObject& response, const QString& libraryPath);
 

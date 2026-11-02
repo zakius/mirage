@@ -258,6 +258,8 @@ void SubsonicProvider::removeAccount(const QString& libraryPath)
     m_formPost.erase(libraryPath);
     m_uploadExtension.erase(libraryPath);
     m_uploadRole.erase(libraryPath);
+    m_lyricsKinds.erase(libraryPath);
+    m_radioOptions.erase(libraryPath);
 }
 
 void SubsonicProvider::fetchServerInfo(const QString& libraryPath, const Account& account, std::function<void()> done)
@@ -295,7 +297,7 @@ void SubsonicProvider::fetchServerInfo(const QString& libraryPath, const Account
     });
 
     call(account, u"getOpenSubsonicExtensions"_s, {},
-         [this, libraryPath, finish](std::optional<QJsonObject> response, ApiError error) {
+         [this, libraryPath, account, finish](std::optional<QJsonObject> response, ApiError error) {
              // Servers without OpenSubsonic answer with an error, so only network errors keep what was known
              if(response || error.code >= 0) {
                  const std::scoped_lock lock{m_mutex};
@@ -317,6 +319,28 @@ void SubsonicProvider::fetchServerInfo(const QString& libraryPath, const Account
                  else {
                      m_uploadExtension.erase(libraryPath);
                  }
+                 if(response && hasExtension(*response, u"songLyrics"_s, 2)) {
+                     m_lyricsKinds.emplace(libraryPath);
+                 }
+                 else {
+                     m_lyricsKinds.erase(libraryPath);
+                 }
+                 m_radioOptions.erase(libraryPath);
+             }
+             // oasis lists the radio sources and stations this user can use
+             if(response && hasExtension(*response, u"oasis"_s, 2)) {
+                 QUrlQuery oasis;
+                 oasis.addQueryItem(u"oasis"_s, u"1"_s);
+                 call(account, u"oasisRadio"_s, oasis,
+                      [this, libraryPath](std::optional<QJsonObject> radio, const ApiError& /*error*/) {
+                          if(radio) {
+                              {
+                                  const std::scoped_lock lock{m_mutex};
+                                  m_radioOptions[libraryPath] = Subsonic::radioOptions(*radio);
+                              }
+                              Q_EMIT serverInfoChanged(libraryPath);
+                          }
+                      });
              }
              finish();
          });
@@ -348,6 +372,21 @@ bool SubsonicProvider::canUpload(const QString& path) const
     const QString libraryPath = libraryPathFor(path);
     const std::scoped_lock lock{m_mutex};
     return m_uploadExtension.contains(libraryPath) && m_uploadRole.contains(libraryPath);
+}
+
+bool SubsonicProvider::hasLyricsKinds(const QString& path) const
+{
+    const QString libraryPath = libraryPathFor(path);
+    const std::scoped_lock lock{m_mutex};
+    return m_lyricsKinds.contains(libraryPath);
+}
+
+RadioOptions SubsonicProvider::radioOptions(const QString& path) const
+{
+    const QString libraryPath = libraryPathFor(path);
+    const std::scoped_lock lock{m_mutex};
+    const auto it = m_radioOptions.find(libraryPath);
+    return it != m_radioOptions.cend() ? it->second : RadioOptions{};
 }
 
 void SubsonicProvider::call(const QString& path, const QString& method, const QUrlQuery& params,

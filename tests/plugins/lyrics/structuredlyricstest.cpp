@@ -170,4 +170,20 @@ TEST(StructuredLyricsTest, ShowsLatinLinesOnceBetweenTranslatedOnes)
         Lyrics::structuredLyricsToLrc(lyrics, Lyrics::LyricsLayers::MainAndPronunciation),
         u"[00:01.00]Always way too self aware\n[00:01.00]总是太过清醒自知\n[00:01.00]Zǒng shì tài guò qīng xǐng zì zhī"_s);
 }
+
+TEST(StructuredLyricsTest, ShowsTranslationsOnlyWhenAsked)
+{
+    const auto lyrics = structuredLyrics(R"([
+        {"kind": "main", "synced": true, "line": [{"start": 1000, "value": "No smoke"}, {"start": 2000, "value": "Oh"}]},
+        {"kind": "translation", "lang": "zh", "synced": true, "line": [{"start": 1000, "value": "无风不起浪"},
+                                                                          {"start": 2000, "value": ""}]},
+        {"kind": "translation", "lang": "pl", "oasisMachineTranslation": true, "synced": true,
+         "line": [{"start": 1000, "value": "Nie ma dymu"}, {"start": 2000, "value": "Oh"}]}
+    ])");
+
+    EXPECT_EQ(Lyrics::structuredLyricsToLrc(lyrics), u"[00:01.00]No smoke\n[00:02.00]Oh"_s);
+    // oasis's translation into the user's language wins; a line that reads the same isn't repeated
+    EXPECT_EQ(Lyrics::structuredLyricsToLrc(lyrics, Lyrics::LyricsLayers::Main, true),
+              u"[00:01.00]No smoke\n[00:01.00]Nie ma dymu\n[00:02.00]Oh"_s);
+}
 } // namespace Fooyin::Testing

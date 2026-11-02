@@ -49,13 +49,14 @@
 #include <QAbstractNetworkCache>
 #include <QAction>
 #include <QActionGroup>
+#include <QCoreApplication>
 #include <QDateTime>
 #include <QDir>
+#include <QJsonArray>
+#include <QLoggingCategory>
 #include <QMainWindow>
 #include <QMenu>
 #include <QMessageBox>
-#include <QJsonArray>
-#include <QLoggingCategory>
 
 Q_LOGGING_CATEGORY(SUBSONIC_PLUGIN, "fy.subsonic.plugin")
 
@@ -69,6 +70,20 @@ bool hasLatinTag(const Fooyin::Track& track)
     return std::ranges::any_of(std::array{TitleLatinTag, AlbumLatinTag, ArtistLatinTag, TrackArtistLatinTag,
                                           AlbumArtistLatinTag},
                                [&track](const char* tag) { return track.hasExtraTag(QString::fromLatin1(tag)); });
+}
+
+//! Names a Last.fm period, as oasis's top tracks station takes them.
+QString periodTitle(const QString& period)
+{
+    static const std::map<QString, const char*> titles{
+        {u"7day"_s, QT_TRANSLATE_NOOP("SubsonicPlugin", "Last 7 days")},
+        {u"1month"_s, QT_TRANSLATE_NOOP("SubsonicPlugin", "Last month")},
+        {u"3month"_s, QT_TRANSLATE_NOOP("SubsonicPlugin", "Last 3 months")},
+        {u"6month"_s, QT_TRANSLATE_NOOP("SubsonicPlugin", "Last 6 months")},
+        {u"12month"_s, QT_TRANSLATE_NOOP("SubsonicPlugin", "Last year")},
+        {u"overall"_s, QT_TRANSLATE_NOOP("SubsonicPlugin", "All time")}};
+    const auto it = titles.find(period);
+    return it != titles.cend() ? QCoreApplication::translate("SubsonicPlugin", it->second) : period;
 }
 
 void logError(const QString& method, const std::optional<QJsonObject>& response,
@@ -179,6 +194,22 @@ void SubsonicPlugin::initialise(const GuiPluginContext& context)
     m_settings->subscribe(Scripting::NameDisplaySetting, m_nameDisplayMenu, checkNameDisplay);
     viewMenu->addAction(m_nameDisplayMenu->menuAction(), Actions::Groups::Three);
 
+    // View > Show Lyrics Translations: translations that come with the lyrics, and on oasis one into the language
+    // set on its dashboard, made only while this is on
+    m_translationAction = new QAction(tr("Show Lyrics &Translations"), viewMenu->menu());
+    m_translationAction->setCheckable(true);
+    m_translationAction->setStatusTip(tr("Show a translation under each lyrics line, where the server has one"));
+    m_translationAction->setChecked(m_settings->value(Scripting::LyricsTranslationSetting).toBool());
+    QObject::connect(m_translationAction, &QAction::toggled, this,
+                     [this](bool checked) { m_settings->set(Scripting::LyricsTranslationSetting, checked); });
+    viewMenu->addAction(m_translationAction, Actions::Groups::Three);
+
+    // Playback > Start Station, for oasis's Last.fm stations
+    auto* playbackMenu = context.actionManager->actionContainer(Constants::Menus::Playback);
+    m_stationMenu      = new QMenu(tr("Start &Station"), playbackMenu->menu());
+    m_stationMenu->setStatusTip(tr("Play a radio the server builds from your listening"));
+    playbackMenu->addAction(m_stationMenu->menuAction());
+
     auto* fileMenu = context.actionManager->actionContainer(Constants::Menus::File);
 
     m_uploadAction = new QAction(tr("&Upload to Server…"), this);
@@ -225,13 +256,24 @@ void SubsonicPlugin::initialise(const GuiPluginContext& context)
         this, TrackContextMenuArea::Track, Constants::Menus::Context::TrackSelection, "Subsonic.StartRadio",
         tr("Start Radio"),
         [this](QMenu* menu, const TrackSelection& selection) {
-            if(selectionServer(selection.tracks).isEmpty()) {
+            const QString server = selectionServer(selection.tracks);
+            if(server.isEmpty()) {
                 return;
             }
-            auto* entry = new QAction(tr("Start Radio"), menu);
-            QObject::connect(entry, &QAction::triggered, this,
-                             [this, tracks = selection.tracks]() { startRadio(tracks); });
-            menu->addAction(entry);
+            // oasis offers a choice of where the songs come from
+            const auto sources = m_provider->radioOptions(server).sources;
+            if(sources.size() < 2) {
+                auto* entry = new QAction(tr("Start Radio"), menu);
+                QObject::connect(entry, &QAction::triggered, this,
+                                 [this, tracks = selection.tracks]() { startRadio(tracks); });
+                menu->addAction(entry);
+                return;
+            }
+            auto* radioMenu = menu->addMenu(tr("Start Radio"));
+            for(const auto& source : sources) {
+                QObject::connect(radioMenu->addAction(source.name), &QAction::triggered, this,
+                                 [this, tracks = selection.tracks, id = source.id]() { startRadio(tracks, id); });
+            }
         },
         Constants::Menus::Context::Utilities);
 
@@ -314,11 +356,45 @@ void SubsonicPlugin::updateServerActions()
         libraries, [this](const auto& library) { return m_provider->hasRomanization(library.second.path); });
     m_nameDisplayPage->setHidden(!romanization);
     m_nameDisplayMenu->menuAction()->setVisible(romanization);
+    m_translationAction->setVisible(std::ranges::any_of(
+        libraries, [this](const auto& library) { return m_provider->hasLyricsKinds(library.second.path); }));
+    updateStations();
 
     const bool canUpload = !uploadServers().empty();
     m_uploadAction->setVisible(canUpload);
     // The audio CD plugin, where it is built and enabled, rips the disc
     m_ripAction->setVisible(canUpload && qobject_cast<Cdda::DiscRipper*>(Mirage::discRipper()));
+}
+
+void SubsonicPlugin::updateStations()
+{
+    m_stationMenu->clear();
+    for(const auto& library : m_libraryManager->allLibraries() | std::views::values) {
+        const auto stations = m_provider->radioOptions(library.path).stations;
+        if(stations.empty()) {
+            continue;
+        }
+        for(const auto& station : stations) {
+            const auto start = [this, server = library.path, station](const QString& period, const QString& name) {
+                m_radio->startStation(server, station.id, period, name);
+            };
+            if(station.periods.isEmpty()) {
+                QObject::connect(m_stationMenu->addAction(station.name), &QAction::triggered, this,
+                                 [start, name = station.name]() { start({}, name); });
+                continue;
+            }
+            auto* periodMenu = m_stationMenu->addMenu(station.name);
+            for(const QString& period : station.periods) {
+                const QString title = periodTitle(period);
+                auto* action        = periodMenu->addAction(title);
+                QObject::connect(action, &QAction::triggered, this, [start, period, name = station.name, title]() {
+                    start(period, u"%1 (%2)"_s.arg(name, title));
+                });
+            }
+        }
+        break;
+    }
+    m_stationMenu->menuAction()->setVisible(!m_stationMenu->isEmpty());
 }
 
 UploadDialog* SubsonicPlugin::createUploadDialog(const QString& libraryPath)
@@ -369,7 +445,7 @@ void SubsonicPlugin::ripCd(const QString& libraryPath)
     });
 }
 
-void SubsonicPlugin::startRadio(const TrackList& tracks)
+void SubsonicPlugin::startRadio(const TrackList& tracks, const QString& source)
 {
     const QString server = selectionServer(tracks);
     if(server.isEmpty() || tracks.empty()) {
@@ -394,15 +470,15 @@ void SubsonicPlugin::startRadio(const TrackList& tracks)
         if(const QString album
            = shared([](const Track& track) { return track.extraTag(QString::fromLatin1(AlbumIdTag)); });
            !album.isEmpty()) {
-            m_radio->start(server, album, seed.album());
+            m_radio->start(server, album, seed.album(), {}, source);
             return;
         }
         if(const QString artist = shared([](const Track& track) { return artistIds(track); }); !artist.isEmpty()) {
-            m_radio->start(server, artist, seed.effectiveAlbumArtist());
+            m_radio->start(server, artist, seed.effectiveAlbumArtist(), {}, source);
             return;
         }
     }
-    m_radio->start(server, songId(seed.filepath()), seed.title(), seed);
+    m_radio->start(server, songId(seed.filepath()), seed.title(), seed, source);
 }
 
 void SubsonicPlugin::star(const QString& server, const QStringList& ids, bool album, bool starred)

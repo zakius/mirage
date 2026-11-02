@@ -46,6 +46,9 @@ constexpr auto AlbumArtistLatinTag = "ALBUMARTISTLATIN";
  */
 constexpr auto NameDisplaySetting = "Subsonic/NameDisplay";
 
+//! Bool setting key: whether server lyrics show translations under their lines, off unless asked for.
+constexpr auto LyricsTranslationSetting = "Subsonic/LyricsTranslation";
+
 //! How $display_name() shows names with a romanized form.
 enum class NameDisplay : uint8_t
 {

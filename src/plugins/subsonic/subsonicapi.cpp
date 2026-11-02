@@ -458,6 +458,27 @@ void markStarred(TrackList& tracks, const QJsonObject& getStarred2Response)
     }
 }
 
+RadioOptions radioOptions(const QJsonObject& response)
+{
+    const QJsonObject radio = response.value("oasisRadio"_L1).toObject();
+    const auto options      = [&radio](QLatin1String key) {
+        std::vector<RadioOption> result;
+        for(const auto& value : toArray(radio.value(key))) {
+            const QJsonObject option = value.toObject();
+            QStringList periods;
+            for(const auto& period : toArray(option.value("period"_L1))) {
+                periods.append(period.toString());
+            }
+            result.push_back({.id            = option.value("id"_L1).toString(),
+                              .name          = option.value("name"_L1).toString(),
+                              .periods       = periods,
+                              .defaultPeriod = option.value("defaultPeriod"_L1).toString()});
+        }
+        return result;
+    };
+    return {.sources = options("source"_L1), .stations = options("station"_L1)};
+}
+
 TrackList similarSongs(const QJsonObject& response, const QString& libraryPath)
 {
     const QJsonObject similar

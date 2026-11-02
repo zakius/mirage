@@ -232,4 +232,19 @@ TEST(SubsonicApiTest, ReadsSimilarSongsOfEitherVersion)
     EXPECT_EQ(v2.front().title(), u"C"_s);
     EXPECT_TRUE(Subsonic::similarSongs(response(R"({"similarSongs": {}})"), u"subsonic://u@host"_s).empty());
 }
+
+TEST(SubsonicApiTest, ReadsRadioSourcesAndStations)
+{
+    const auto options = Subsonic::radioOptions(response(R"({"oasisRadio": {"defaultSource": "all",
+        "source": [{"id": "all", "name": "Everything mixed"}, {"id": "lastfm", "name": "Last.fm"}],
+        "station": [{"id": "lastfm-top", "name": "Last.fm top tracks", "period": ["7day", "overall"],
+                     "defaultPeriod": "7day"}, {"id": "lastfm-loved", "name": "Last.fm loved tracks"}]}})"));
+
+    ASSERT_EQ(options.sources.size(), 2);
+    EXPECT_EQ(options.sources.at(1).id, u"lastfm"_s);
+    ASSERT_EQ(options.stations.size(), 2);
+    EXPECT_EQ(options.stations.front().periods, (QStringList{u"7day"_s, u"overall"_s}));
+    EXPECT_TRUE(options.stations.back().periods.isEmpty());
+    EXPECT_TRUE(Subsonic::radioOptions(response("{}")).sources.empty());
+}
 } // namespace Fooyin::Testing

@@ -60,7 +60,11 @@ private:
     struct Extensions
     {
         bool songLyrics{false};
+        //! songLyrics v2: `enhanced` and `kinds`, so translations can be asked for
+        bool kinds{false};
         bool romanization{false};
+        //! Extension `oasis` v3: translation into the user's language on demand
+        bool oasisTranslate{false};
     };
 
     std::shared_ptr<LibraryProviderRegistry> m_providers;

@@ -78,6 +78,10 @@ public:
     [[nodiscard]] bool hasFormPost(const QString& path) const;
     //! True if the server owning @p path has the `upload` extension and lets the user upload (`uploadRole`).
     [[nodiscard]] bool canUpload(const QString& path) const;
+    //! True if the server owning @p path has songLyrics v2, whose lyrics may carry translations.
+    [[nodiscard]] bool hasLyricsKinds(const QString& path) const;
+    //! The radio sources and stations of the server owning @p path (extension `oasis` v2); none elsewhere.
+    [[nodiscard]] RadioOptions radioOptions(const QString& path) const;
 
     //! Calls @p method on the server owning @p path, a library, track or artwork path.
     void call(const QString& path, const QString& method, const QUrlQuery& params, ResponseCallback callback);
@@ -119,6 +123,10 @@ private:
     std::set<QString> m_uploadExtension;
     //! Library paths whose users have getUser's `uploadRole`.
     std::set<QString> m_uploadRole;
+    //! Library paths whose servers have songLyrics v2.
+    std::set<QString> m_lyricsKinds;
+    //! By library path, the radio options of servers with the extension `oasis` v2.
+    std::map<QString, RadioOptions> m_radioOptions;
 };
 } // namespace Subsonic
 } // namespace Fooyin

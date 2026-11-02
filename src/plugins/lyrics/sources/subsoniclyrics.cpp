@@ -98,8 +98,10 @@ void SubsonicLyrics::search(const SearchParams& params)
         // Servers without OpenSubsonic answer with an error; a failed request is asked again next time
         if(!response.isEmpty()) {
             // `enhanced` and `kinds` belong to songLyrics v2
-            m_extensions[m_server] = {.songLyrics   = has("songLyrics"_L1),
-                                      .romanization = has("romanization"_L1, 1) && has("songLyrics"_L1, 2)};
+            m_extensions[m_server] = {.songLyrics     = has("songLyrics"_L1),
+                                      .kinds          = has("songLyrics"_L1, 2),
+                                      .romanization   = has("romanization"_L1, 1) && has("songLyrics"_L1, 2),
+                                      .oasisTranslate = has("oasis"_L1, 3)};
         }
         requestLyrics();
     });
@@ -148,18 +150,30 @@ void SubsonicLyrics::requestLyrics()
                    : display == Scripting::NameDisplay::Both      ? LyricsLayers::MainAndPronunciation
                                                                   : LyricsLayers::Main;
         }
+        // Translations are asked for only while shown; oasis then also translates into the user's language
+        const bool translation = extensions.kinds && settings()->value(Scripting::LyricsTranslationSetting).toBool();
+
         // Servers that ignore `kinds` send every layer; the conversion picks the ones asked for
-        if(layers != LyricsLayers::Main) {
+        if(layers != LyricsLayers::Main || translation) {
+            QStringList kinds{layers == LyricsLayers::Pronunciation ? u"pronunciation"_s
+                              : layers == LyricsLayers::Main        ? u"main"_s
+                                                                    : u"main,pronunciation"_s};
+            if(translation) {
+                kinds.append(u"translation"_s);
+            }
             params.addQueryItem(u"enhanced"_s, u"true"_s);
-            params.addQueryItem(u"kinds"_s,
-                                layers == LyricsLayers::Pronunciation ? u"pronunciation"_s : u"main,pronunciation"_s);
+            params.addQueryItem(u"kinds"_s, kinds.join(u','));
+            if(translation && extensions.oasisTranslate) {
+                params.addQueryItem(u"oasis"_s, u"1"_s);
+                params.addQueryItem(u"oasisTranslate"_s, u"1"_s);
+            }
         }
 
-        get(u"getLyricsBySongId"_s, params, [this, layers](const QJsonObject& response) {
+        get(u"getLyricsBySongId"_s, params, [this, layers, translation](const QJsonObject& response) {
             LyricData data;
             // Lyrics found by song id need no title or artist match
             data.data = structuredLyricsToLrc(
-                toArray(response.value("lyricsList"_L1).toObject().value("structuredLyrics"_L1)), layers);
+                toArray(response.value("lyricsList"_L1).toObject().value("structuredLyrics"_L1)), layers, translation);
             Q_EMIT searchResult(data.data.isEmpty() ? std::vector<LyricData>{} : std::vector<LyricData>{data});
         });
         return;

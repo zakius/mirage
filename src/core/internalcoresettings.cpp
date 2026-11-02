@@ -123,6 +123,7 @@ CoreSettings::CoreSettings(SettingsManager* settingsManager, DbConnectionPoolPtr
     m_settings->createSetting<PlayMode>(0, QString::fromLatin1(PlayModeKey));
     m_settings->createSetting<AutoRefresh>(false, u"Library/AutoRefresh"_s);
     m_settings->createSetting(QString::fromLatin1(Scripting::NameDisplaySetting), 0);
+    m_settings->createSetting(QString::fromLatin1(Scripting::LyricsTranslationSetting), false);
     Scripting::setNameDisplay(
         static_cast<Scripting::NameDisplay>(m_settings->value(Scripting::NameDisplaySetting).toInt()));
     m_settings->subscribe(Scripting::NameDisplaySetting, m_settings, [](const QVariant& value) {

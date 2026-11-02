@@ -49,19 +49,25 @@ Radio::Radio(SubsonicProvider* provider, PlaylistHandler* playlistHandler, Playe
     QObject::connect(m_playerController, &PlayerController::playlistTrackChanged, this, &Radio::topUp);
 }
 
-void Radio::start(const QString& server, const QString& seedId, const QString& name, const Track& first)
+void Radio::start(const QString& server, const QString& seedId, const QString& name, const Track& first,
+                  const QString& source)
 {
     QUrlQuery params;
     params.addQueryItem(u"id"_s, seedId);
     params.addQueryItem(u"count"_s, QString::number(RadioCount));
+    if(!source.isEmpty()) {
+        params.addQueryItem(u"oasis"_s, u"1"_s);
+        params.addQueryItem(u"oasisSource"_s, source);
+    }
     m_provider->call(server, u"getSimilarSongs"_s, params,
-                     [this, server, name, first](std::optional<QJsonObject> response, const ApiError& error) {
+                     [this, server, name, first, source](std::optional<QJsonObject> response, const ApiError& error) {
                          if(!response) {
                              Q_EMIT failed(tr("The server could not start a radio: %1").arg(error.message));
                              return;
                          }
 
-                         m_station = Station{.server = server};
+                         stop();
+                         m_station = Station{.server = server, .source = source};
                          TrackList tracks;
                          if(first.isValid()) {
                              tracks = unseen({first});
@@ -73,15 +79,59 @@ void Radio::start(const QString& server, const QString& seedId, const QString& n
                              return;
                          }
                          tracks.insert(tracks.end(), similar.cbegin(), similar.cend());
+                         play(name, tracks);
+                     });
+}
 
-                         Playlist* playlist = m_playlistHandler->createTempPlaylist(tr("Radio: %1").arg(name), tracks);
-                         if(!playlist) {
-                             m_station.reset();
+void Radio::startStation(const QString& server, const QString& station, const QString& period, const QString& name)
+{
+    QUrlQuery params;
+    params.addQueryItem(u"oasis"_s, u"1"_s);
+    params.addQueryItem(u"oasisStation"_s, station);
+    if(!period.isEmpty()) {
+        params.addQueryItem(u"oasisPeriod"_s, period);
+    }
+    m_provider->call(server, u"createPlaylist"_s, params,
+                     [this, server, name](std::optional<QJsonObject> response, const ApiError& error) {
+                         if(!response) {
+                             Q_EMIT failed(tr("The server could not start the station: %1").arg(error.message));
                              return;
                          }
-                         m_station->playlistId = playlist->id();
-                         m_playerController->startPlayback(playlist);
+
+                         stop();
+                         const QJsonObject playlist = response->value("playlist"_L1).toObject();
+                         m_station = Station{.server = server, .stationId = playlist.value("id"_L1).toString()};
+                         const TrackList tracks = unseen(similarSongs(
+                             QJsonObject{{u"similarSongs"_s, QJsonObject{{u"song"_s, playlist.value("entry"_L1)}}}},
+                             m_provider->libraryPathFor(server)));
+                         if(tracks.empty()) {
+                             stop();
+                             Q_EMIT failed(tr("The station has no songs yet."));
+                             return;
+                         }
+                         play(name, tracks);
                      });
+}
+
+void Radio::play(const QString& name, const TrackList& tracks)
+{
+    Playlist* playlist = m_playlistHandler->createTempPlaylist(tr("Radio: %1").arg(name), tracks);
+    if(!playlist) {
+        stop();
+        return;
+    }
+    m_station->playlistId = playlist->id();
+    m_playerController->startPlayback(playlist);
+}
+
+void Radio::stop()
+{
+    if(m_station && !m_station->stationId.isEmpty()) {
+        QUrlQuery params;
+        params.addQueryItem(u"id"_s, m_station->stationId);
+        m_provider->call(m_station->server, u"deletePlaylist"_s, params, [](std::optional<QJsonObject>, ApiError) { });
+    }
+    m_station.reset();
 }
 
 void Radio::topUp(const PlaylistTrack& current)
@@ -91,19 +141,32 @@ void Radio::topUp(const PlaylistTrack& current)
     }
     const Playlist* playlist = m_playlistHandler->playlistById(m_station->playlistId);
     if(!playlist) {
-        m_station.reset();
+        stop();
         return;
     }
     if(playlist->trackCount() - 1 - current.indexInPlaylist > TopUpAhead) {
         return;
     }
 
-    // Each top-up is seeded from the last song, so the radio drifts on
+    // A station's server playlist refills as its songs play; a song radio asks for songs like its last one, so it
+    // drifts on
     QUrlQuery params;
-    params.addQueryItem(u"id"_s, songId(playlist->tracks().back().filepath()));
-    params.addQueryItem(u"count"_s, QString::number(RadioCount));
+    QString method;
+    if(!m_station->stationId.isEmpty()) {
+        method = u"getPlaylist"_s;
+        params.addQueryItem(u"id"_s, m_station->stationId);
+    }
+    else {
+        method = u"getSimilarSongs"_s;
+        params.addQueryItem(u"id"_s, songId(playlist->tracks().back().filepath()));
+        params.addQueryItem(u"count"_s, QString::number(RadioCount));
+        if(!m_station->source.isEmpty()) {
+            params.addQueryItem(u"oasis"_s, u"1"_s);
+            params.addQueryItem(u"oasisSource"_s, m_station->source);
+        }
+    }
     m_station->fetching = true;
-    m_provider->call(m_station->server, u"getSimilarSongs"_s, params,
+    m_provider->call(m_station->server, method, params,
                      [this, playlistId = m_station->playlistId](std::optional<QJsonObject> response, ApiError error) {
                          if(!m_station || m_station->playlistId != playlistId) {
                              return;
@@ -113,8 +176,13 @@ void Radio::topUp(const PlaylistTrack& current)
                              qCWarning(SUBSONIC_RADIO) << "Failed to top up the radio:" << error.message;
                              return;
                          }
+                         const QJsonValue entries = response->value("playlist"_L1).toObject().value("entry"_L1);
+                         const QJsonObject songs
+                             = response->contains("playlist"_L1)
+                                 ? QJsonObject{{u"similarSongs"_s, QJsonObject{{u"song"_s, entries}}}}
+                                 : *response;
                          const TrackList tracks
-                             = unseen(similarSongs(*response, m_provider->libraryPathFor(m_station->server)));
+                             = unseen(similarSongs(songs, m_provider->libraryPathFor(m_station->server)));
                          if(!tracks.empty()) {
                              m_playlistHandler->appendToPlaylist(playlistId, tracks);
                          }
