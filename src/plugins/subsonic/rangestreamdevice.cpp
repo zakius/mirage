@@ -62,6 +62,10 @@ struct RangeStreamState
     qint64 size{-1};
     QString error;
     bool closed{false};
+    //! Counts close() calls; replies of an earlier opening are aborted and their results dropped.
+    int generation{0};
+    //! Replies in flight, with the generation they belong to. Used in the network thread only.
+    std::map<QNetworkReply*, int> replies;
 
     //! Set when the server answered a range request with the whole resource, which is read while it downloads.
     bool wholeBody{false};
@@ -84,8 +88,15 @@ bool isWholeBody(const QNetworkReply* reply)
 
 // Runs in the network thread
 void startChunkRequest(const std::shared_ptr<QNetworkAccessManager>& network, const QUrl& url,
-                       const std::shared_ptr<RangeStreamState>& state, qint64 chunk)
+                       const std::shared_ptr<RangeStreamState>& state, qint64 chunk, int generation)
 {
+    {
+        const std::scoped_lock lock{state->mutex};
+        if(state->generation != generation) {
+            return;
+        }
+    }
+
     QNetworkRequest request = apiRequest(url);
     request.setRawHeader("Range", "bytes=" + QByteArray::number(chunk * ChunkSize) + "-"
                                       + QByteArray::number(((chunk + 1) * ChunkSize) - 1));
@@ -94,14 +105,18 @@ void startChunkRequest(const std::shared_ptr<QNetworkAccessManager>& network, co
         static_cast<int>(std::chrono::duration_cast<std::chrono::milliseconds>(RequestTimeout).count()));
 
     auto* reply = network->get(request);
+    {
+        const std::scoped_lock lock{state->mutex};
+        state->replies.emplace(reply, generation);
+    }
 
-    QObject::connect(reply, &QNetworkReply::metaDataChanged, reply, [state, reply]() {
+    QObject::connect(reply, &QNetworkReply::metaDataChanged, reply, [state, reply, generation]() {
         if(reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() != OkCode) {
             return;
         }
 
         const std::scoped_lock lock{state->mutex};
-        if(state->wholeBody) {
+        if(state->wholeBody || state->generation != generation) {
             return;
         }
         bool ok{false};
@@ -121,7 +136,7 @@ void startChunkRequest(const std::shared_ptr<QNetworkAccessManager>& network, co
         }
         state->ready.notify_all();
     });
-    QObject::connect(reply, &QNetworkReply::finished, reply, [network, url, state, reply, chunk]() {
+    QObject::connect(reply, &QNetworkReply::finished, reply, [network, url, state, reply, chunk, generation]() {
         reply->deleteLater();
 
         const QByteArray data = reply->readAll();
@@ -130,6 +145,10 @@ void startChunkRequest(const std::shared_ptr<QNetworkAccessManager>& network, co
         int attempt{0};
         {
             const std::scoped_lock lock{state->mutex};
+            state->replies.erase(reply);
+            if(state->generation != generation) {
+                return;
+            }
 
             if(failed && !isWholeBody(reply) && !state->closed && (attempt = ++state->attempts[chunk]) < MaxAttempts) {
                 qCInfo(SUBSONIC_STREAM) << "Retrying chunk" << chunk << "after error:" << replyError(reply);
@@ -158,8 +177,9 @@ void startChunkRequest(const std::shared_ptr<QNetworkAccessManager>& network, co
         state->ready.notify_all();
 
         if(attempt > 0) {
-            QTimer::singleShot(RetryDelay * attempt, network.get(),
-                               [network, url, state, chunk]() { startChunkRequest(network, url, state, chunk); });
+            QTimer::singleShot(RetryDelay * attempt, network.get(), [network, url, state, chunk, generation]() {
+                startChunkRequest(network, url, state, chunk, generation);
+            });
         }
     });
 }
@@ -174,8 +194,9 @@ void fetchChunk(const std::shared_ptr<QNetworkAccessManager>& network, const QUr
     }
 
     state->pending.insert(chunk);
-    QMetaObject::invokeMethod(network.get(),
-                              [network, url, state, chunk]() { startChunkRequest(network, url, state, chunk); });
+    QMetaObject::invokeMethod(network.get(), [network, url, state, chunk, generation = state->generation]() {
+        startChunkRequest(network, url, state, chunk, generation);
+    });
 }
 } // namespace
 
@@ -204,6 +225,7 @@ bool RangeStreamDevice::open(OpenMode mode)
 
     std::unique_lock lock{m_state->mutex};
     m_state->closed = false;
+    m_state->error.clear();
     fetchChunk(m_network, m_url, m_state, 0);
 
     const bool answered = m_state->ready.wait_for(lock, RequestTimeout, [this]() {
@@ -225,10 +247,32 @@ void RangeStreamDevice::close()
     {
         const std::scoped_lock lock{m_state->mutex};
         m_state->closed = true;
+        ++m_state->generation;
         m_state->chunks.clear();
+        m_state->pending.clear();
+        m_state->attempts.clear();
+        m_state->wholeBody    = false;
+        m_state->bodyComplete = false;
         m_state->body.clear();
     }
     m_state->ready.notify_all();
+
+    // A server that ignores range requests would otherwise keep sending the whole file of a skipped track
+    QMetaObject::invokeMethod(m_network.get(), [state = m_state]() {
+        std::vector<QNetworkReply*> stale;
+        {
+            const std::scoped_lock lock{state->mutex};
+            for(const auto& [reply, generation] : state->replies) {
+                if(generation != state->generation) {
+                    stale.push_back(reply);
+                }
+            }
+        }
+        for(QNetworkReply* reply : stale) {
+            reply->abort();
+        }
+    });
+
     if(isOpen()) {
         QIODevice::close();
     }

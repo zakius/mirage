@@ -187,6 +187,15 @@ if(TARGET subsonic)
     )
     target_include_directories(test_subsonicupload PRIVATE ${CMAKE_SOURCE_DIR}/src/plugins/subsonic)
     target_link_libraries(test_subsonicupload PRIVATE Qt6::Network)
+
+    fooyin_add_test(
+        test_rangestreamdevice
+        plugins/subsonic/rangestreamdevicetest.cpp
+        ${CMAKE_SOURCE_DIR}/src/plugins/subsonic/rangestreamdevice.cpp
+        ${CMAKE_SOURCE_DIR}/src/plugins/subsonic/subsonicapi.cpp
+    )
+    target_include_directories(test_rangestreamdevice PRIVATE ${CMAKE_SOURCE_DIR}/src/plugins/subsonic)
+    target_link_libraries(test_rangestreamdevice PRIVATE Qt6::Network)
 endif()
 
 fooyin_add_test(test_metadatamatcher gui/metadatalookup/metadatamatchertest.cpp)
