@@ -205,4 +205,15 @@ TEST(SubsonicApiTest, MarksTheSongsOfStarredAlbumsAndArtists)
     EXPECT_FALSE(tracks[1].hasExtraTag(QString::fromLatin1(Subsonic::AlbumStarredTag)));
     EXPECT_TRUE(tracks[1].hasExtraTag(QString::fromLatin1(Subsonic::ArtistStarredTag)));
 }
+
+TEST(SubsonicApiTest, SongsWithoutAlbumArtistsBelongToTheirArtists)
+{
+    const Track track = Subsonic::songToTrack(
+        response(R"({"id": "s1", "artists": [{"id": "a", "name": "A", "nameLatin": "Ei"}, {"id": "b", "name": "B"}]})"),
+        u"subsonic://u@host"_s);
+
+    EXPECT_EQ(track.albumArtists(), (QStringList{u"A"_s, u"B"_s}));
+    EXPECT_EQ(track.extraTag(QString::fromLatin1(Subsonic::AlbumArtistLatinTag)),
+              track.extraTag(QString::fromLatin1(Subsonic::ArtistLatinTag)));
+}
 } // namespace Fooyin::Testing

@@ -336,6 +336,11 @@ Track songToTrack(const QJsonObject& song, const QString& libraryPath)
     else {
         setLatinTag(track, AlbumArtistLatinTag, latinNames(song.value("albumArtists"_L1)));
     }
+    // A song without album artists belongs to its artists, so library views list it under them
+    if(albumArtists.isEmpty() || albumArtists.constFirst().isEmpty()) {
+        albumArtists = artists;
+        setLatinTag(track, AlbumArtistLatinTag, track.extraTag(QString::fromLatin1(ArtistLatinTag)));
+    }
     track.setAlbumArtists(albumArtists);
     if(const QStringList ids = names(song.value("albumArtists"_L1), "id"_L1); !ids.isEmpty()) {
         track.replaceExtraTag(QString::fromLatin1(AlbumArtistIdTag), ids);
