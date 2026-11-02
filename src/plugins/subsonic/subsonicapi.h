@@ -111,6 +111,9 @@ void setStarred(Track& track, const char* tag, bool starred);
 //! Sets the album and artist starred tags of @p tracks from a getStarred2 response.
 void markStarred(TrackList& tracks, const QJsonObject& getStarred2Response);
 
+//! Returns the songs of a getSimilarSongs or getSimilarSongs2 response as tracks of the library at @p libraryPath.
+[[nodiscard]] TrackList similarSongs(const QJsonObject& response, const QString& libraryPath);
+
 //! Returns getUser's `scrobblingEnabled`: whether the server scrobbles the user's plays itself, if it says.
 [[nodiscard]] std::optional<bool> serverScrobbles(const QJsonObject& getUserResponse);
 /*!

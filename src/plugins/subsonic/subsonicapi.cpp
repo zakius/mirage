@@ -458,6 +458,19 @@ void markStarred(TrackList& tracks, const QJsonObject& getStarred2Response)
     }
 }
 
+TrackList similarSongs(const QJsonObject& response, const QString& libraryPath)
+{
+    const QJsonObject similar
+        = response.value(response.contains("similarSongs2"_L1) ? "similarSongs2"_L1 : "similarSongs"_L1).toObject();
+    TrackList tracks;
+    for(const auto& song : toArray(similar.value("song"_L1))) {
+        Track track = songToTrack(song.toObject(), libraryPath);
+        track.generateHash();
+        tracks.push_back(track);
+    }
+    return tracks;
+}
+
 std::optional<bool> serverScrobbles(const QJsonObject& getUserResponse)
 {
     const QJsonValue enabled = getUserResponse.value("user"_L1).toObject().value("scrobblingEnabled"_L1);

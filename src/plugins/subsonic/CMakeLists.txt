@@ -17,6 +17,8 @@ create_fooyin_plugin_internal(
         subsonicplugin.h
         subsonicprovider.cpp
         subsonicprovider.h
+        subsonicradio.cpp
+        subsonicradio.h
         subsonicupload.cpp
         subsonicupload.h
         subsonicuploaddialog.cpp

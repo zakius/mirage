@@ -216,4 +216,20 @@ TEST(SubsonicApiTest, SongsWithoutAlbumArtistsBelongToTheirArtists)
     EXPECT_EQ(track.extraTag(QString::fromLatin1(Subsonic::AlbumArtistLatinTag)),
               track.extraTag(QString::fromLatin1(Subsonic::ArtistLatinTag)));
 }
+
+TEST(SubsonicApiTest, ReadsSimilarSongsOfEitherVersion)
+{
+    const auto v1 = Subsonic::similarSongs(response(R"({"similarSongs": {"song": [{"id": "a", "title": "A"},
+                                                                                  {"id": "b", "title": "B"}]}})"),
+                                           u"subsonic://u@host"_s);
+    ASSERT_EQ(v1.size(), 2);
+    EXPECT_EQ(v1.at(1).filepath(), u"subsonic://u@host/song/b"_s);
+
+    // Servers answer getSimilarSongs2 with similarSongs2, and may send one song as an object
+    const auto v2 = Subsonic::similarSongs(response(R"({"similarSongs2": {"song": {"id": "c", "title": "C"}}})"),
+                                           u"subsonic://u@host"_s);
+    ASSERT_EQ(v2.size(), 1);
+    EXPECT_EQ(v2.front().title(), u"C"_s);
+    EXPECT_TRUE(Subsonic::similarSongs(response(R"({"similarSongs": {}})"), u"subsonic://u@host"_s).empty());
+}
 } // namespace Fooyin::Testing

@@ -22,6 +22,7 @@
 #include "subsonicpage.h"
 #include "subsonicplaylists.h"
 #include "subsonicprovider.h"
+#include "subsonicradio.h"
 #include "subsonicuploaddialog.h"
 
 #include "../cdda/cddadiscripper.h"
@@ -84,7 +85,8 @@ void SubsonicPlugin::initialise(const CorePluginContext& context)
 {
     m_libraryManager  = context.libraryManager;
     m_library         = context.library;
-    m_playlistHandler = context.playlistHandler;
+    m_playlistHandler  = context.playlistHandler;
+    m_playerController = context.playerController;
     m_settings        = context.settingsManager;
     m_audioLoader     = context.audioLoader;
     m_network         = context.networkAccess;
@@ -213,6 +215,25 @@ void SubsonicPlugin::initialise(const GuiPluginContext& context)
     };
     addServerAction(m_uploadAction, "Subsonic.UploadToServer", tr("Upload to This Server…"));
     addServerAction(m_ripAction, "Subsonic.RipCdToServer", tr("Rip CD to This Server…"));
+
+    // Plays the server's songs like the selection, topped up as they play
+    m_radio = new Radio(m_provider.get(), m_playlistHandler, m_playerController, this);
+    QObject::connect(m_radio, &Radio::failed, this, [](const QString& message) {
+        QMessageBox::information(Utils::getMainWindow(), tr("Start Radio"), message);
+    });
+    context.trackSelection->registerTrackContextAction(
+        this, TrackContextMenuArea::Track, Constants::Menus::Context::TrackSelection, "Subsonic.StartRadio",
+        tr("Start Radio"),
+        [this](QMenu* menu, const TrackSelection& selection) {
+            if(selectionServer(selection.tracks).isEmpty()) {
+                return;
+            }
+            auto* entry = new QAction(tr("Start Radio"), menu);
+            QObject::connect(entry, &QAction::triggered, this,
+                             [this, tracks = selection.tracks]() { startRadio(tracks); });
+            menu->addAction(entry);
+        },
+        Constants::Menus::Context::Utilities);
 
     // Stars the albums or artists of the selected tracks, or unstars them where all of them are starred
     const auto addStarAction = [this, &context](const char* id, bool album) {
@@ -346,6 +367,42 @@ void SubsonicPlugin::ripCd(const QString& libraryPath)
             dialog->show();
         }
     });
+}
+
+void SubsonicPlugin::startRadio(const TrackList& tracks)
+{
+    const QString server = selectionServer(tracks);
+    if(server.isEmpty() || tracks.empty()) {
+        return;
+    }
+
+    // Library copies carry the album and artist ids; a playlist may hold older ones
+    TrackList current;
+    std::ranges::transform(tracks, std::back_inserter(current), [this](const Track& track) {
+        const Track libraryTrack = m_library->trackForId(track.id());
+        return libraryTrack.isValid() ? libraryTrack : track;
+    });
+    const auto shared = [&current](const auto& ids) {
+        const QStringList first = ids(current.front());
+        return !first.isEmpty() && std::ranges::all_of(current, [&](const Track& track) { return ids(track) == first; })
+                 ? first.front()
+                 : QString{};
+    };
+    const Track& seed = current.front();
+
+    if(current.size() > 1) {
+        if(const QString album
+           = shared([](const Track& track) { return track.extraTag(QString::fromLatin1(AlbumIdTag)); });
+           !album.isEmpty()) {
+            m_radio->start(server, album, seed.album());
+            return;
+        }
+        if(const QString artist = shared([](const Track& track) { return artistIds(track); }); !artist.isEmpty()) {
+            m_radio->start(server, artist, seed.effectiveAlbumArtist());
+            return;
+        }
+    }
+    m_radio->start(server, songId(seed.filepath()), seed.title(), seed);
 }
 
 void SubsonicPlugin::star(const QString& server, const QStringList& ids, bool album, bool starred)

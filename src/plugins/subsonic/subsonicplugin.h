@@ -33,10 +33,12 @@ class QMenu;
 namespace Fooyin {
 class AudioLoader;
 class NetworkAccessManager;
+class PlayerController;
 }
 
 namespace Fooyin::Subsonic {
 class NameDisplayPage;
+class Radio;
 class SubsonicProvider;
 
 class SubsonicPlugin : public QObject,
@@ -64,6 +66,8 @@ private:
     //! Shows the upload and name display actions only where a server offers them.
     void updateServerActions();
     UploadDialog* createUploadDialog(const QString& libraryPath);
+    //! Starts a radio from the selected @p tracks: their album if they share one, else their artist, else the first.
+    void startRadio(const TrackList& tracks);
     //! Stars or unstars the albums, or artists, with the server ids @p ids on the server of @p server.
     void star(const QString& server, const QStringList& ids, bool album, bool starred);
     void scrobble(const Track& track, bool submission);
@@ -72,6 +76,8 @@ private:
     LibraryManager* m_libraryManager{nullptr};
     MusicLibrary* m_library{nullptr};
     PlaylistHandler* m_playlistHandler{nullptr};
+    PlayerController* m_playerController{nullptr};
+    Radio* m_radio{nullptr};
     SettingsManager* m_settings{nullptr};
     std::shared_ptr<AudioLoader> m_audioLoader;
     std::shared_ptr<NetworkAccessManager> m_network;
