@@ -155,4 +155,19 @@ TEST(StructuredLyricsTest, ShowsMainLyricsWithoutPronunciation)
     EXPECT_EQ(Lyrics::structuredLyricsToLrc(latinSong, Lyrics::LyricsLayers::MainAndPronunciation),
               u"[00:01.00]Hello"_s);
 }
+
+TEST(StructuredLyricsTest, ShowsLatinLinesOnceBetweenTranslatedOnes)
+{
+    // Lyrics with a translation line after each line: the English lines romanize to themselves
+    const auto lyrics = structuredLyrics(R"([
+        {"kind": "main", "synced": true, "line": [{"start": 1000, "value": "Always way too self aware"},
+                                                   {"start": 1000, "value": "总是太过清醒自知"}]},
+        {"kind": "pronunciation", "synced": true, "line": [{"start": 1000, "value": "Always way too self aware"},
+                                                            {"start": 1000, "value": "Zǒng shì tài guò qīng xǐng zì zhī"}]}
+    ])");
+
+    EXPECT_EQ(
+        Lyrics::structuredLyricsToLrc(lyrics, Lyrics::LyricsLayers::MainAndPronunciation),
+        u"[00:01.00]Always way too self aware\n[00:01.00]总是太过清醒自知\n[00:01.00]Zǒng shì tài guò qīng xǐng zì zhī"_s);
+}
 } // namespace Fooyin::Testing

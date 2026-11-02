@@ -134,12 +134,16 @@ QString structuredLyricsToLrc(const QJsonArray& structuredLyrics, LyricsLayers l
     if(const qint64 offset = entry.value("offset"_L1).toInteger(); entry.value("synced"_L1).toBool() && offset != 0) {
         lines.append(u"[offset:%1]"_s.arg(offset));
     }
-    // Pronunciation lines match the main lines one to one, so each follows its main line at the same time
-    const qsizetype pairedCount = paired.value("line"_L1).toArray().size();
+    // Pronunciation lines match the main lines one to one, so each follows its main line at the same time. A line
+    // already in Latin script, such as an English line between translated ones, reads the same and isn't repeated.
+    const QJsonArray pairedLines = paired.value("line"_L1).toArray();
+    const auto text              = [](const QJsonArray& lines, qsizetype i) {
+        return lines.at(i).toObject().value("value"_L1).toString().simplified();
+    };
     for(qsizetype i{0}; i < entryLines.size(); ++i) {
         const auto start = lineStart(entry, i);
         lines.append(lrcLine(entry, i, start));
-        if(i < pairedCount) {
+        if(i < pairedLines.size() && text(pairedLines, i).compare(text(entryLines, i), Qt::CaseInsensitive) != 0) {
             lines.append(lrcLine(paired, i, start));
         }
     }
