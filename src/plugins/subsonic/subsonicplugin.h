@@ -64,6 +64,8 @@ private:
     //! Shows the upload and name display actions only where a server offers them.
     void updateServerActions();
     UploadDialog* createUploadDialog(const QString& libraryPath);
+    //! Stars or unstars the albums, or artists, with the server ids @p ids on the server of @p server.
+    void star(const QString& server, const QStringList& ids, bool album, bool starred);
     void scrobble(const Track& track, bool submission);
     void writeStats(const TrackList& tracks, Track::Stats stats);
 

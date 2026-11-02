@@ -50,11 +50,11 @@ uint64_t toMSecs(const QJsonValue& value)
     return time.isValid() ? static_cast<uint64_t>(time.toMSecsSinceEpoch()) : 0;
 }
 
-QStringList names(const QJsonValue& value)
+QStringList names(const QJsonValue& value, QLatin1String key = "name"_L1)
 {
     QStringList result;
     for(const auto& item : Fooyin::Subsonic::toArray(value)) {
-        if(const QString name = item.toObject().value("name"_L1).toString(); !name.isEmpty()) {
+        if(const QString name = item.toObject().value(key).toString(); !name.isEmpty()) {
             result.append(name);
         }
     }
@@ -108,7 +108,9 @@ QStringList texts(const QJsonValue& value)
 }
 
 //! Song fields without a track field of their own, and the extra tags that keep them for the properties view.
-constexpr std::array<std::pair<const char*, const char*>, 14> ExtraTagFields{{
+constexpr std::array<std::pair<const char*, const char*>, 16> ExtraTagFields{{
+    {"albumId", Fooyin::Subsonic::AlbumIdTag},
+    {"artistId", Fooyin::Subsonic::ArtistIdTag},
     {"suffix", "SUFFIX"},
     {"contentType", "CONTENTTYPE"},
     {"path", "SERVERPATH"},
@@ -335,6 +337,9 @@ Track songToTrack(const QJsonObject& song, const QString& libraryPath)
         setLatinTag(track, AlbumArtistLatinTag, latinNames(song.value("albumArtists"_L1)));
     }
     track.setAlbumArtists(albumArtists);
+    if(const QStringList ids = names(song.value("albumArtists"_L1), "id"_L1); !ids.isEmpty()) {
+        track.replaceExtraTag(QString::fromLatin1(AlbumArtistIdTag), ids);
+    }
 
     if(const QStringList artistsLatin = track.extraTag(QString::fromLatin1(ArtistLatinTag));
        !albumArtists.isEmpty() && artistsLatin.size() == artists.size()) {
@@ -417,6 +422,35 @@ Track songToTrack(const QJsonObject& song, const QString& libraryPath)
     }
 
     return track;
+}
+
+QStringList artistIds(const Track& track)
+{
+    const QStringList albumArtists = track.extraTag(QString::fromLatin1(AlbumArtistIdTag));
+    return albumArtists.isEmpty() ? track.extraTag(QString::fromLatin1(ArtistIdTag)) : albumArtists;
+}
+
+void setStarred(Track& track, const char* tag, bool starred)
+{
+    if(starred) {
+        track.replaceExtraTag(QString::fromLatin1(tag), u"1"_s);
+    }
+    else {
+        track.removeExtraTag(QString::fromLatin1(tag));
+    }
+}
+
+void markStarred(TrackList& tracks, const QJsonObject& getStarred2Response)
+{
+    const QJsonObject starred = getStarred2Response.value("starred2"_L1).toObject();
+    const QStringList albums  = names(starred.value("album"_L1), "id"_L1);
+    const QStringList artists = names(starred.value("artist"_L1), "id"_L1);
+    for(Track& track : tracks) {
+        setStarred(track, AlbumStarredTag, albums.contains(track.extraTag(QString::fromLatin1(AlbumIdTag)).value(0)));
+        setStarred(track, ArtistStarredTag, std::ranges::any_of(artistIds(track), [&artists](const QString& id) {
+                       return artists.contains(id);
+                   }));
+    }
 }
 
 std::optional<bool> serverScrobbles(const QJsonObject& getUserResponse)

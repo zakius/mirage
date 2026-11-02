@@ -398,9 +398,18 @@ QString SubsonicProvider::libraryPathFor(const QString& path) const
 
 void SubsonicProvider::finishSync(const std::shared_ptr<SyncState>& state)
 {
-    qCInfo(SUBSONIC) << "Fetched" << state->tracks.size() << "songs from" << state->libraryPath;
-    Q_EMIT tracksFetched(state->libraryPath);
-    state->callback(std::move(state->tracks));
+    // Songs carry their own star, albums and artists are starred apart from them
+    call(state->account, u"getStarred2"_s, {}, [this, state](std::optional<QJsonObject> response, ApiError error) {
+        if(response) {
+            markStarred(state->tracks, *response);
+        }
+        else {
+            qCWarning(SUBSONIC) << "Failed to list starred albums and artists:" << error.message;
+        }
+        qCInfo(SUBSONIC) << "Fetched" << state->tracks.size() << "songs from" << state->libraryPath;
+        Q_EMIT tracksFetched(state->libraryPath);
+        state->callback(std::move(state->tracks));
+    });
 }
 
 void SubsonicProvider::fetchSongs(const std::shared_ptr<SyncState>& state, int offset)

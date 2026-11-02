@@ -214,6 +214,41 @@ void SubsonicPlugin::initialise(const GuiPluginContext& context)
     addServerAction(m_uploadAction, "Subsonic.UploadToServer", tr("Upload to This Server…"));
     addServerAction(m_ripAction, "Subsonic.RipCdToServer", tr("Rip CD to This Server…"));
 
+    // Stars the albums or artists of the selected tracks, or unstars them where all of them are starred
+    const auto addStarAction = [this, &context](const char* id, bool album) {
+        context.trackSelection->registerTrackContextAction(
+            this, TrackContextMenuArea::Track, Constants::Menus::Context::TrackSelection, id,
+            album ? tr("Star Album") : tr("Star Artist"),
+            [this, album](QMenu* menu, const TrackSelection& selection) {
+                const QString server = selectionServer(selection.tracks);
+                QStringList ids;
+                for(const Track& track : selection.tracks) {
+                    ids.append(album ? track.extraTag(QString::fromLatin1(AlbumIdTag)) : artistIds(track));
+                }
+                ids.removeDuplicates();
+                if(server.isEmpty() || ids.isEmpty()) {
+                    return;
+                }
+
+                const char* tag     = album ? AlbumStarredTag : ArtistStarredTag;
+                const bool starred  = std::ranges::all_of(selection.tracks, [tag](const Track& track) {
+                    return track.hasExtraTag(QString::fromLatin1(tag));
+                });
+                const bool several  = ids.size() > 1;
+                const QString title = album ? (starred ? (several ? tr("Unstar Albums") : tr("Unstar Album"))
+                                                       : (several ? tr("Star Albums") : tr("Star Album")))
+                                            : (starred ? (several ? tr("Unstar Artists") : tr("Unstar Artist"))
+                                                       : (several ? tr("Star Artists") : tr("Star Artist")));
+                auto* entry         = new QAction(title, menu);
+                QObject::connect(entry, &QAction::triggered, this,
+                                 [this, server, ids, album, starred]() { star(server, ids, album, !starred); });
+                menu->addAction(entry);
+            },
+            Constants::Menus::Context::Utilities);
+    };
+    addStarAction("Subsonic.StarAlbum", true);
+    addStarAction("Subsonic.StarArtist", false);
+
     // Uploads and romanized names exist only for servers that offer them, which is known once they have answered
     updateServerActions();
     QObject::connect(m_provider.get(), &SubsonicProvider::serverInfoChanged, this,
@@ -306,6 +341,40 @@ void SubsonicPlugin::ripCd(const QString& libraryPath)
             dialog->show();
         }
     });
+}
+
+void SubsonicPlugin::star(const QString& server, const QStringList& ids, bool album, bool starred)
+{
+    QUrlQuery params;
+    for(const QString& id : ids) {
+        params.addQueryItem(album ? u"albumId"_s : u"artistId"_s, id);
+    }
+
+    const QString method = starred ? u"star"_s : u"unstar"_s;
+    m_provider->callForm(
+        server, method, params,
+        [this, server, ids, album, starred, method](std::optional<QJsonObject> response, ApiError error) {
+            if(!response) {
+                logError(method, response, error);
+                return;
+            }
+
+            // The library shows the change at once; the next sync reads it back from the server
+            const char* tag = album ? AlbumStarredTag : ArtistStarredTag;
+            TrackList changed;
+            for(Track track : m_library->libraryTracks()) {
+                const QStringList trackIds = album ? track.extraTag(QString::fromLatin1(AlbumIdTag)) : artistIds(track);
+                if(track.hasExtraTag(QString::fromLatin1(tag)) != starred
+                   && m_provider->libraryPathFor(track.filepath()) == server
+                   && std::ranges::any_of(trackIds, [&ids](const QString& id) { return ids.contains(id); })) {
+                    setStarred(track, tag, starred);
+                    changed.push_back(track);
+                }
+            }
+            if(!changed.empty()) {
+                m_library->updateTrackMetadata(changed);
+            }
+        });
 }
 
 void SubsonicPlugin::scrobble(const Track& track, bool submission)

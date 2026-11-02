@@ -43,6 +43,14 @@ using Scripting::ArtistLatinTag;
 using Scripting::TitleLatinTag;
 using Scripting::TrackArtistLatinTag;
 
+//! Extra tags with the server ids of a song's album, artist and album artists (OpenSubsonic `albumArtists`).
+constexpr auto AlbumIdTag       = "SUBSONIC_ALBUMID";
+constexpr auto ArtistIdTag      = "SUBSONIC_ARTISTID";
+constexpr auto AlbumArtistIdTag = "SUBSONIC_ALBUMARTISTID";
+//! Extra tags set to "1" on songs whose album, or album artist, the user starred.
+constexpr auto AlbumStarredTag  = "ALBUMSTARRED";
+constexpr auto ArtistStarredTag = "ARTISTSTARRED";
+
 struct Account
 {
     QUrl url;
@@ -96,6 +104,13 @@ QNetworkReply* post(QNetworkAccessManager* network, const Account& account, cons
  * contributor roles and others) go to extra tags, so the properties view shows everything the server sends.
  */
 [[nodiscard]] Track songToTrack(const QJsonObject& song, const QString& libraryPath);
+
+//! Returns the server ids of a track's album artists, or of its artist where the server names no album artists.
+[[nodiscard]] QStringList artistIds(const Track& track);
+//! Sets or removes the starred extra tag @p tag of @p track.
+void setStarred(Track& track, const char* tag, bool starred);
+//! Sets the album and artist starred tags of @p tracks from a getStarred2 response.
+void markStarred(TrackList& tracks, const QJsonObject& getStarred2Response);
 
 //! Returns getUser's `scrobblingEnabled`: whether the server scrobbles the user's plays itself, if it says.
 [[nodiscard]] std::optional<bool> serverScrobbles(const QJsonObject& getUserResponse);

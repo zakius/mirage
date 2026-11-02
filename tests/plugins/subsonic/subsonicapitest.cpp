@@ -176,4 +176,33 @@ TEST(SubsonicApiTest, SendsAPlusAsAPlus)
     EXPECT_TRUE(url.query(QUrl::FullyEncoded).contains("u=a%2Bb"_L1));
     EXPECT_EQ(u"Rock + Roll & more"_s, QUrlQuery{url}.queryItemValue(u"name"_s, QUrl::FullyDecoded));
 }
+
+TEST(SubsonicApiTest, StarsTheAlbumArtistWhereTheServerNamesOne)
+{
+    const Track withAlbumArtist = Subsonic::songToTrack(response(R"({"id": "s1", "albumId": "al1", "artistId": "ar1",
+        "albumArtists": [{"id": "ar2", "name": "B"}, {"id": "ar3", "name": "C"}]})"),
+                                                        u"subsonic://u@host"_s);
+    const Track withArtist = Subsonic::songToTrack(response(R"({"id": "s2", "albumId": "al1", "artistId": "ar1"})"),
+                                                   u"subsonic://u@host"_s);
+
+    EXPECT_EQ(withAlbumArtist.extraTag(QString::fromLatin1(Subsonic::AlbumIdTag)), QStringList{u"al1"_s});
+    EXPECT_EQ(Subsonic::artistIds(withAlbumArtist), (QStringList{u"ar2"_s, u"ar3"_s}));
+    EXPECT_EQ(Subsonic::artistIds(withArtist), QStringList{u"ar1"_s});
+}
+
+TEST(SubsonicApiTest, MarksTheSongsOfStarredAlbumsAndArtists)
+{
+    TrackList tracks{
+        Subsonic::songToTrack(response(R"({"id": "s1", "albumId": "al1", "artistId": "ar1"})"), u"subsonic://u@host"_s),
+        Subsonic::songToTrack(response(R"({"id": "s2", "albumId": "al2", "artistId": "ar2"})"),
+                              u"subsonic://u@host"_s)};
+    Subsonic::setStarred(tracks[1], Subsonic::AlbumStarredTag, true);
+
+    Subsonic::markStarred(tracks, response(R"({"starred2": {"album": [{"id": "al1"}], "artist": {"id": "ar2"}}})"));
+
+    EXPECT_TRUE(tracks[0].hasExtraTag(QString::fromLatin1(Subsonic::AlbumStarredTag)));
+    EXPECT_FALSE(tracks[0].hasExtraTag(QString::fromLatin1(Subsonic::ArtistStarredTag)));
+    EXPECT_FALSE(tracks[1].hasExtraTag(QString::fromLatin1(Subsonic::AlbumStarredTag)));
+    EXPECT_TRUE(tracks[1].hasExtraTag(QString::fromLatin1(Subsonic::ArtistStarredTag)));
+}
 } // namespace Fooyin::Testing
