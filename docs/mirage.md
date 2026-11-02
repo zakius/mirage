@@ -149,8 +149,8 @@ Subsonic API documentation.
   are taken from `subsonic-response.error`.
 - **Account.** A settings page adds a server: base URL, user name, password. The password goes to the core
   `AccountStore`. The page calls `addLibrary("subsonic://user@host:port[/path]", name)`.
-- **Full sync.** `search3` with `query=""`, `songCount=500`, paged by `songOffset` until a short page arrives. Each
-  song becomes a `Track`:
+- **Full sync.** `search3` with `query=""`, `songCount=500`, paged by `songOffset` until a page adds no songs (servers
+  may send fewer than asked, and one that ignores `songOffset` repeats its songs). Each song becomes a `Track`:
   - path `<library path>/song/<id>`
   - title, artists (OpenSubsonic `artists` if present), album, album artist (`displayAlbumArtist` or `albumArtists`)
   - track and disc number, year, genres, duration, bit rate, size, codec from `suffix`

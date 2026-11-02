@@ -157,6 +157,8 @@ public:
     bool uploadExtension{true};
     bool uploadRole{true};
     bool albumExists{false};
+    //! search3 answers every page with the first songs.
+    bool ignoreSongOffset{false};
     //! The uploadTrack call (counting from 1) that stores two bytes and then drops the connection.
     int dropUploadTrack{0};
     //! The uploadTrack call (counting from 1) that the server refuses with an API error.
@@ -230,6 +232,15 @@ private:
                 extensions.append(QJsonObject{{u"name"_s, u"upload"_s}, {u"versions"_s, QJsonArray{1}}});
             }
             return ok({{u"openSubsonicExtensions"_s, extensions}});
+        }
+        if(method == "search3"_L1) {
+            // A server holding 250 songs that caps songCount at 100
+            const int offset = ignoreSongOffset ? 0 : query.queryItemValue(u"songOffset"_s).toInt();
+            QJsonArray songs;
+            for(int i = offset; i < std::min(250, offset + 100); ++i) {
+                songs.append(QJsonObject{{u"id"_s, QString::number(i)}, {u"title"_s, u"t"_s}});
+            }
+            return ok({{u"searchResult3"_s, QJsonObject{{u"song"_s, songs}}}});
         }
         if(method == "getUser"_L1) {
             return ok({{u"user"_s, QJsonObject{{u"username"_s, u"alice"_s}, {u"uploadRole"_s, uploadRole}}}});
@@ -713,5 +724,44 @@ TEST(SubsonicUploadTagsTest, AcceptsTheSuffixesOfTheExtension)
     for(const auto* suffix : {"wav", "ape", "wv", ""}) {
         EXPECT_FALSE(Subsonic::isUploadSuffix(QString::fromLatin1(suffix)));
     }
+}
+
+namespace {
+std::optional<TrackList> fetchAll(const std::shared_ptr<FakeServer>& server, const Subsonic::Account& account,
+                                  const QString& dbPath)
+{
+    DbConnection::DbParams params;
+    params.type     = u"QSQLITE"_s;
+    params.filePath = dbPath;
+    auto dbPool     = DbConnectionPool::create(params, u"subsonic-paging-test"_s);
+    const DbConnectionHandler handler{dbPool};
+    DbSchema schema{DbConnectionProvider{dbPool}};
+    std::ignore = schema.upgradeDatabase(22, u"://dbschema.xml"_s);
+
+    Subsonic::SubsonicProvider provider{server, dbPool};
+    LibraryInfo library;
+    library.path = Subsonic::SubsonicProvider::libraryPath(account);
+    EXPECT_TRUE(provider.saveAccount(library.path, account));
+
+    std::optional<std::optional<TrackList>> result;
+    provider.fetchTracks(library, [&result](std::optional<TrackList> tracks) { result = std::move(tracks); });
+    EXPECT_TRUE(waitFor([&result]() { return result.has_value(); }));
+    return result.value_or(std::nullopt);
+}
+} // namespace
+
+TEST_F(SubsonicUploadTest, FetchesEverySongFromAServerThatCapsPages)
+{
+    const auto tracks = fetchAll(m_server, m_account, m_dir.filePath(u"mirage.db"_s));
+    ASSERT_TRUE(tracks.has_value());
+    EXPECT_EQ(250, tracks->size());
+}
+
+TEST_F(SubsonicUploadTest, StopsListingWhenTheServerIgnoresTheOffset)
+{
+    m_server->ignoreSongOffset = true;
+    const auto tracks          = fetchAll(m_server, m_account, m_dir.filePath(u"mirage.db"_s));
+    ASSERT_TRUE(tracks.has_value());
+    EXPECT_EQ(100, tracks->size());
 }
 } // namespace Fooyin::Testing

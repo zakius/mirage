@@ -27,6 +27,7 @@
 #include <QLoggingCategory>
 
 #include <deque>
+#include <set>
 #include <ranges>
 
 Q_LOGGING_CATEGORY(SUBSONIC, "fy.subsonic")
@@ -75,6 +76,9 @@ struct SyncState
     LibraryProvider::FetchCallback callback;
     TrackList tracks;
     std::deque<QString> albumIds;
+    //! Songs and albums listed so far, so a page that repeats them ends the listing.
+    std::set<QString> songIds;
+    std::set<QString> listedAlbums;
     bool romanization{false};
 };
 
@@ -399,13 +403,19 @@ void SubsonicProvider::fetchSongs(const std::shared_ptr<SyncState>& state, int o
                  return;
              }
 
+             // Servers may cap songCount, so pages are asked until one adds nothing; a server that ignores songOffset
+             // sends the same songs again
+             bool added{false};
              const QJsonArray songs = toArray(response->value("searchResult3"_L1).toObject().value("song"_L1));
              for(const auto& song : songs) {
-                 state->tracks.push_back(songToTrack(song.toObject(), state->libraryPath));
+                 if(state->songIds.emplace(song.toObject().value("id"_L1).toString()).second) {
+                     state->tracks.push_back(songToTrack(song.toObject(), state->libraryPath));
+                     added = true;
+                 }
              }
 
-             if(songs.size() == PageSize) {
-                 fetchSongs(state, offset + PageSize);
+             if(added) {
+                 fetchSongs(state, offset + static_cast<int>(songs.size()));
              }
              else if(state->tracks.empty()) {
                  fetchAlbumList(state, 0);
@@ -431,13 +441,18 @@ void SubsonicProvider::fetchAlbumList(const std::shared_ptr<SyncState>& state, i
                  return;
              }
 
+             bool added{false};
              const QJsonArray albums = toArray(response->value("albumList2"_L1).toObject().value("album"_L1));
              for(const auto& album : albums) {
-                 state->albumIds.push_back(album.toObject().value("id"_L1).toString());
+                 const QString id = album.toObject().value("id"_L1).toString();
+                 if(state->listedAlbums.emplace(id).second) {
+                     state->albumIds.push_back(id);
+                     added = true;
+                 }
              }
 
-             if(albums.size() == PageSize) {
-                 fetchAlbumList(state, offset + PageSize);
+             if(added) {
+                 fetchAlbumList(state, offset + static_cast<int>(albums.size()));
              }
              else {
                  fetchNextAlbum(state);
