@@ -107,6 +107,30 @@ TEST(StructuredLyricsTest, ShowsPronunciationWithWordTiming)
     EXPECT_EQ(lyrics.lines.at(1).words.at(1).timestamp, 3400);
 }
 
+TEST(StructuredLyricsTest, KeepsTheSpacesBetweenTimedWords)
+{
+    // oasis starts a word with the space before it; a cue may also leave text out, here the space before "dake"
+    const QString text = Lyrics::structuredLyricsToLrc(structuredLyrics(R"([
+        {"kind": "pronunciation", "lang": "ja-Latn", "synced": true,
+         "line": [{"start": 1000, "value": "Shizumu yō ni"}, {"start": 7000, "value": "Futari dake"}],
+         "cueLine": [{"index": 0, "start": 1000, "end": 4000, "value": "Shizumu yō ni",
+                      "cue": [{"start": 1000, "value": "Shizumu", "byteStart": 0, "byteEnd": 6},
+                              {"start": 2000, "value": " yō", "byteStart": 7, "byteEnd": 10},
+                              {"start": 3000, "value": " ni", "byteStart": 11, "byteEnd": 13}]},
+                     {"index": 1, "start": 7000, "end": 9000, "value": "Futari dake",
+                      "cue": [{"start": 7000, "value": "Futari", "byteStart": 0, "byteEnd": 5},
+                              {"start": 8000, "value": "dake", "byteStart": 7, "byteEnd": 10}]}]}
+    ])"), Lyrics::LyricsLayers::Pronunciation);
+    EXPECT_EQ(text, u"[00:01.00]<00:01.00>Shizumu <00:02.00>yō <00:03.00>ni\n"
+                    "[00:07.00]<00:07.00>Futari <00:08.00>dake"_s);
+
+    const auto lyrics = Lyrics::parse(text);
+    ASSERT_EQ(lyrics.lines.size(), 2);
+    EXPECT_EQ(lyrics.lines.at(0).joinedWords().trimmed(), u"Shizumu yō ni"_s);
+    EXPECT_EQ(lyrics.lines.at(0).words.at(1).timestamp, 2000);
+    EXPECT_EQ(lyrics.lines.at(1).joinedWords().trimmed(), u"Futari dake"_s);
+}
+
 TEST(StructuredLyricsTest, PairsEachMainLineWithItsPronunciation)
 {
     const QString text

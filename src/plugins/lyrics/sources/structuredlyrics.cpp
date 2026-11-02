@@ -26,6 +26,7 @@
 
 #include <algorithm>
 #include <optional>
+#include <vector>
 
 using namespace Qt::StringLiterals;
 
@@ -61,16 +62,42 @@ QString lrcLine(const QJsonObject& entry, qsizetype index, std::optional<uint64_
         return Fooyin::Lyrics::formatTimestamp(static_cast<uint64_t>(std::max<qint64>(time.toInteger(), 0)));
     };
 
-    QString words;
     const QJsonArray cueLines = entry.value("cueLine"_L1).toArray();
     // Several cueLines may share an index, one per singer; the first is the main singer's
     const auto cueLine = std::ranges::find_if(
         cueLines, [index](const QJsonValue& line) { return line.toObject().value("index"_L1).toInteger() == index; });
-    if(cueLine != cueLines.end()) {
-        for(const auto& cue : cueLine->toObject().value("cue"_L1).toArray()) {
-            const QJsonObject object = cue.toObject();
-            words += u"<%1>%2"_s.arg(timestamp(object.value("start"_L1)), object.value("value"_L1).toString());
+    const QJsonArray cues = cueLine != cueLines.end() ? cueLine->toObject().value("cue"_L1).toArray() : QJsonArray{};
+
+    // Each word runs from its cue to the next cue in the line's text, so text between cues (spaces, romaji merged
+    // into the word before) stays; byte offsets that don't fit the line fall back to the cues' values
+    const QByteArray utf8 = value.toUtf8();
+    std::vector<qsizetype> starts;
+    for(const auto& cue : cues) {
+        const qsizetype byteStart = cue.toObject().value("byteStart"_L1).toInteger(-1);
+        if(byteStart < 0 || byteStart >= utf8.size() || (!starts.empty() && byteStart <= starts.back())) {
+            starts.clear();
+            break;
         }
+        starts.push_back(byteStart);
+    }
+
+    QString words;
+    for(qsizetype i{0}; i < cues.size(); ++i) {
+        const QJsonObject cue = cues.at(i).toObject();
+        QString text          = cue.value("value"_L1).toString();
+        if(!starts.empty()) {
+            const qsizetype end = i + 1 < cues.size() ? starts.at(i + 1) : utf8.size();
+            text                = QString::fromUtf8(utf8.sliced(starts.at(i), end - starts.at(i)));
+            if(i == 0) {
+                words += QString::fromUtf8(utf8.first(starts.front()));
+            }
+        }
+        // The parser drops spaces right after a word's timestamp, so they end the word before
+        qsizetype lead{0};
+        while(lead < text.size() && text.at(lead).isSpace()) {
+            ++lead;
+        }
+        words += text.first(lead) + u"<%1>"_s.arg(timestamp(cue.value("start"_L1))) + text.sliced(lead);
     }
 
     return u"[%1]%2"_s.arg(Fooyin::Lyrics::formatTimestamp(*start), words.isEmpty() ? value : words);
