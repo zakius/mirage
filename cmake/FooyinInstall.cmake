@@ -54,9 +54,8 @@ elseif(UNIX)
         COMPONENT fooyin
     )
     install(
-        FILES "${CMAKE_CURRENT_SOURCE_DIR}/dist/linux/org.fooyin.fooyin.metainfo.xml"
+        FILES "${CMAKE_CURRENT_SOURCE_DIR}/dist/linux/${FOOYIN_APP_ID}.metainfo.xml"
         DESTINATION ${APPDATA_INSTALL_DIR}
-        RENAME ${FOOYIN_APP_ID}.metainfo.xml
         COMPONENT fooyin
     )
 

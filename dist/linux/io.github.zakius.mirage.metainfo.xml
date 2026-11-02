@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+    <id>io.github.zakius.mirage</id>
+    <launchable type="desktop-id">io.github.zakius.mirage.desktop</launchable>
+    <metadata_license>CC0-1.0</metadata_license>
+    <project_license>GPL-3.0-or-later</project_license>
+    <name>mirage</name>
+    <summary>Play music from Subsonic servers</summary>
+    <developer id="io.github.zakius">
+        <name>zakius</name>
+    </developer>
+    <description>
+        <p>
+            mirage is a desktop music player for Subsonic and OpenSubsonic servers. It shows your
+            servers' music as one library you can browse, filter and search, streams it with gapless
+            playback, and keeps playlists, stars, ratings and plays on the server.
+        </p>
+        <p>
+            It works with any Subsonic server. Features a server offers through OpenSubsonic
+            extensions, such as synced lyrics, romanized names or uploads, appear only on servers
+            that support them.
+        </p>
+        <p>
+            mirage is based on fooyin and keeps its customisable layouts, widgets, visualisations,
+            DSPs and scripting. It plays music from servers only, not local files.
+        </p>
+    </description>
+    <provides>
+        <binary>mirage</binary>
+    </provides>
+    <content_rating type="oars-1.1" />
+    <url type="homepage">https://github.com/zakius/mirage</url>
+    <url type="bugtracker">https://github.com/zakius/mirage/issues</url>
+    <url type="vcs-browser">https://github.com/zakius/mirage</url>
+    <releases>
+        <release version="0.14.1" date="2026-11-02">
+            <description>
+                <p>First mirage build, based on fooyin 0.14.1.</p>
+            </description>
+        </release>
+    </releases>
+    <translation type="qt">fooyin</translation>
+</component>
