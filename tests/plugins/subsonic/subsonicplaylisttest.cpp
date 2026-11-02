@@ -527,6 +527,18 @@ TEST_F(SubsonicPlaylistTest, ASyncInFlightKeepsAPlaylistCreatedMeanwhile)
     EXPECT_EQ(2, m_server->playlists.size());
 }
 
+TEST_F(SubsonicPlaylistTest, SearchAndFilterResultsStayOnThisMachine)
+{
+    addServer();
+    m_mirror->syncPlaylists(m_libraryPath);
+    ASSERT_TRUE(waitFor([this]() { return playlistNamed(u"Mix"_s) != nullptr; }));
+
+    m_handler->createPlaylist(u"Search Results"_s, {libraryTrack(m_libraryPath, 3)});
+    m_handler->createPlaylist(u"Filter Results (1)"_s, {libraryTrack(m_libraryPath, 3)});
+    processEventsFor(300ms);
+    EXPECT_EQ(1, m_server->playlists.size());
+}
+
 TEST_F(SubsonicPlaylistTest, ComparesOwnersWithoutCase)
 {
     m_server->playlists[u"1"_s].owner = u"Alice"_s;

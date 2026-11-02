@@ -25,9 +25,12 @@
 #include <core/library/musiclibrary.h>
 #include <core/playlist/playlisthandler.h>
 
+#include <QCoreApplication>
 #include <QJsonArray>
 #include <QLoggingCategory>
 #include <QScopedValueRollback>
+
+#include <array>
 
 Q_LOGGING_CATEGORY(SUBSONIC_PLAYLISTS, "fy.subsonic.playlists")
 
@@ -45,6 +48,15 @@ constexpr int NotFoundCode      = 70;
 constexpr qsizetype SongIdBatch = 100;
 
 namespace {
+//! Search and filter widgets keep their results in playlists of these names, which belong to the machine they're on
+bool isResultsPlaylist(const QString& name)
+{
+    const std::array names{u"Search Results"_s, u"Filter Results"_s,
+                           QCoreApplication::translate("Fooyin::SearchWidget", "Search Results"),
+                           QCoreApplication::translate("Fooyin::Filters::FilterController", "Filter Results")};
+    return std::ranges::any_of(names, [&name](const QString& results) { return name.startsWith(results); });
+}
+
 QString playlistKey(const Fooyin::Playlist* playlist)
 {
     return playlist->extraProperties().value(QString::fromLatin1(PlaylistProperty));
@@ -273,7 +285,8 @@ std::optional<QString> PlaylistMirror::defaultServer() const
 void PlaylistMirror::uploadPlaylist(Playlist* playlist)
 {
     if(m_applyingServerChanges || !playlist || playlist->isTemporary() || playlist->isAutoPlaylist()
-       || !playlistKey(playlist).isEmpty() || m_uploadingPlaylists.contains(playlist->id())) {
+       || isResultsPlaylist(playlist->name()) || !playlistKey(playlist).isEmpty()
+       || m_uploadingPlaylists.contains(playlist->id())) {
         return;
     }
     // fooyin creates an empty "Default" playlist whenever there is none; it is uploaded once it gets tracks
