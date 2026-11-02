@@ -134,20 +134,24 @@ std::shared_ptr<RemoteDownloadHandle> RemoteIoService::download(const QUrl& requ
     auto handle = std::make_shared<RemoteDownloadHandle>();
 
     QUrl url{requestedUrl};
+    NetworkRequestOptions options;
     if(const auto provider = m_providers ? m_providers->providerForPath(url.toString()) : nullptr) {
         url = provider->resolveUrl(url);
+        // Resolved provider URLs carry the provider's credentials
+        options = NetworkRequestOption::Credentials;
     }
 
     const auto timeoutMs = static_cast<int>(std::clamp(timeout, 1ms, std::chrono::milliseconds{INT_MAX}).count());
 
     const QPointer contextPtr{context};
     auto startRequest
-        = [network = m_networkManager, url, timeoutMs, contextPtr, handle, callback = std::move(callback)]() mutable {
+        = [network = m_networkManager, url, options, timeoutMs, contextPtr, handle,
+           callback = std::move(callback)]() mutable {
               if(handle->isCancelled()) {
                   return;
               }
 
-              QNetworkRequest req = makeNetworkRequest(url);
+              QNetworkRequest req = makeNetworkRequest(url, options);
 
               auto* reply = network->get(req);
               handle->setReply(reply);

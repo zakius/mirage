@@ -21,6 +21,7 @@
 
 #include "internalcoresettings.h"
 
+#include <core/network/networkutils.h>
 #include <utils/fypaths.h>
 #include <utils/settings/settingsmanager.h>
 
@@ -28,6 +29,7 @@
 #include <QNetworkCacheMetaData>
 #include <QNetworkDiskCache>
 #include <QNetworkProxyFactory>
+#include <QNetworkReply>
 
 Q_LOGGING_CATEGORY(NETWORK, "fy.network")
 
@@ -169,6 +171,29 @@ NetworkAccessManager::NetworkAccessManager(SettingsManager* settings, QObject* p
 }
 
 NetworkAccessManager::~NetworkAccessManager() = default;
+
+QNetworkReply* NetworkAccessManager::createRequest(Operation op, const QNetworkRequest& request,
+                                                   QIODevice* outgoingData)
+{
+    auto* reply = QNetworkAccessManager::createRequest(op, request, outgoingData);
+    if(request.attribute(CredentialsAttribute).toBool()) {
+        // The reply's URL is already the target when redirected() arrives
+        QObject::connect(reply, &QNetworkReply::redirected, reply,
+                         [reply, from = request.url()](const QUrl& target) mutable {
+                             const bool sameHost = target.host().compare(from.host(), Qt::CaseInsensitive) == 0;
+                             const bool safe = target.scheme() == from.scheme() || target.scheme() == "https"_L1;
+                             if(sameHost && safe) {
+                                 from = target;
+                                 Q_EMIT reply->redirectAllowed();
+                             }
+                             else {
+                                 qCWarning(NETWORK) << "Refused a redirect with credentials to" << target.host();
+                                 reply->abort();
+                             }
+                         });
+    }
+    return reply;
+}
 } // namespace Fooyin
 
 #include "core/network/moc_networkaccessmanager.cpp"

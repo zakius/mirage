@@ -39,13 +39,18 @@ bool isHlsStreamUrl(const QUrl& url)
 QNetworkRequest makeNetworkRequest(const QUrl& url, NetworkRequestOptions options)
 {
     QNetworkRequest request{url};
+    const bool credentials = options.testFlag(NetworkRequestOption::Credentials);
     request.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
-                         options.testFlag(NetworkRequestOption::UserVerifiedRedirects)
+                         credentials || options.testFlag(NetworkRequestOption::UserVerifiedRedirects)
                              ? QNetworkRequest::UserVerifiedRedirectPolicy
                              : QNetworkRequest::NoLessSafeRedirectPolicy);
     request.setRawHeader("User-Agent", networkUserAgent());
 
-    if(options.testFlag(NetworkRequestOption::AlwaysNetwork)) {
+    if(credentials) {
+        request.setAttribute(CredentialsAttribute, true);
+        request.setAttribute(QNetworkRequest::CacheSaveControlAttribute, false);
+    }
+    if(credentials || options.testFlag(NetworkRequestOption::AlwaysNetwork)) {
         request.setAttribute(QNetworkRequest::CacheLoadControlAttribute, QNetworkRequest::AlwaysNetwork);
     }
     if(options.testFlag(NetworkRequestOption::AcceptAny)) {

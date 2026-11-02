@@ -34,12 +34,18 @@ enum class NetworkRequestOption : uint8_t
     AcceptAny             = 1 << 1,
     IcyMetadata           = 1 << 2,
     UserVerifiedRedirects = 1 << 3,
+    //! The URL carries credentials: the reply never goes to the disk cache, and a NetworkAccessManager follows
+    //! redirects only to the same host, and from http to https at most, so the credentials never reach another host.
+    Credentials = 1 << 4,
 };
 Q_DECLARE_FLAGS(NetworkRequestOptions, NetworkRequestOption)
 
 [[nodiscard]] FYCORE_EXPORT QByteArray networkUserAgent();
 [[nodiscard]] FYCORE_EXPORT bool isHlsStreamUrl(const QUrl& url);
 [[nodiscard]] FYCORE_EXPORT QNetworkRequest makeNetworkRequest(const QUrl& url, NetworkRequestOptions options = {});
+
+//! Set on requests made with NetworkRequestOption::Credentials.
+constexpr auto CredentialsAttribute = static_cast<QNetworkRequest::Attribute>(QNetworkRequest::User + 1);
 } // namespace Fooyin
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(Fooyin::NetworkRequestOptions)

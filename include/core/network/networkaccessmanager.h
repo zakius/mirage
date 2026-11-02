@@ -54,6 +54,10 @@ public:
     explicit NetworkAccessManager(SettingsManager* settings, QObject* parent = nullptr);
     ~NetworkAccessManager() override;
 
+protected:
+    QNetworkReply* createRequest(Operation op, const QNetworkRequest& request,
+                                 QIODevice* outgoingData = nullptr) override;
+
 private:
     std::unique_ptr<NetworkAccessManagerPrivate> p;
 };
