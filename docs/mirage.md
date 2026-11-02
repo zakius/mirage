@@ -248,6 +248,13 @@ Subsonic API documentation.
 - **Accounts.** The settings page lists the servers. Selecting one edits its name, URL, user name or password; an empty
   password keeps the stored one. The library path stays the same, so tracks, statistics and playlists are kept when
   the server moves.
+- **Credentials.** The password is stored as it is in the core `AccountStore`, in the database, because token
+  authentication needs it. mirage does not use the system keychain (QtKeychain is not a dependency); instead the
+  database file is created readable by the user only (mode 0600 on Linux, and changed to it at start if it was
+  not), and SQLite gives its journal files the same mode. On Windows the file lies in the user's own profile. API,
+  stream, artwork and server lyrics requests carry the user name and token in the URL, so they are made with
+  `NetworkRequestOption::Credentials`: they never enter the network disk cache, and their redirects are followed only
+  to the same host (http to https at most). The disk cache that earlier builds filled is cleared once.
 - **Errors.** API errors carry the Subsonic error code. Error messages never include request URLs, because those carry
   the authentication token.
 - **Upload and CD rip.** For servers listing the OpenSubsonic extension `upload` v1 (the spec is oasis's

@@ -26,6 +26,7 @@
 #include <utils/fypaths.h>
 #include <utils/settings/settingsmanager.h>
 
+#include <QFile>
 #include <QFileInfo>
 
 using namespace Qt::StringLiterals;
@@ -39,6 +40,17 @@ Fooyin::DbConnection::DbParams dbConnectionParams()
     params.type           = u"QSQLITE"_s;
     params.connectOptions = u"QSQLITE_OPEN_URI"_s;
     params.filePath       = Fooyin::Utils::sharePath() + u"/fooyin.db"_s;
+
+    // mirage: the database holds server passwords (AccountStore), so only the user may read it. SQLite gives its
+    // journal files the database's permissions.
+    constexpr auto OwnerOnly = QFileDevice::ReadOwner | QFileDevice::WriteOwner;
+    QFile file{params.filePath};
+    if(!file.exists()) {
+        std::ignore = file.open(QIODevice::WriteOnly | QIODevice::NewOnly, OwnerOnly);
+    }
+    else {
+        file.setPermissions(OwnerOnly);
+    }
 
     return params;
 }
