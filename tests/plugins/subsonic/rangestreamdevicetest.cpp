@@ -23,6 +23,7 @@
 #include <QElapsedTimer>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
+#include <QPointer>
 #include <QThread>
 #include <QTimer>
 
@@ -59,8 +60,8 @@ bool waitFor(const std::function<bool()>& condition)
 class WholeBodyReply : public QNetworkReply
 {
 public:
-    WholeBodyReply(const QNetworkRequest& request, QByteArray body, bool finishes, bool fails,
-                   std::atomic_bool* aborted, QObject* parent)
+    WholeBodyReply(const QNetworkRequest& request, QByteArray body, bool finishes, std::atomic_bool* aborted,
+                   QObject* parent)
         : QNetworkReply{parent}
         , m_body{std::move(body)}
         , m_aborted{aborted}
@@ -69,19 +70,24 @@ public:
         setUrl(request.url());
         setOperation(QNetworkAccessManager::GetOperation);
         QIODevice::open(ReadOnly | Unbuffered);
-        QTimer::singleShot(0, this, [this, finishes, fails]() {
+        QTimer::singleShot(0, this, [this, finishes]() {
             setAttribute(QNetworkRequest::HttpStatusCodeAttribute, 200);
             setHeader(QNetworkRequest::ContentLengthHeader, 1000);
             Q_EMIT metaDataChanged();
             Q_EMIT readyRead();
-            if(fails) {
-                setError(RemoteHostClosedError, u"closed"_s);
-            }
-            if(finishes || fails) {
+            if(finishes) {
                 setFinished(true);
                 Q_EMIT finished();
             }
         });
+    }
+
+    //! Drops the connection before the whole body has arrived.
+    void fail()
+    {
+        setError(RemoteHostClosedError, u"closed"_s);
+        setFinished(true);
+        Q_EMIT finished();
     }
 
     void abort() override
@@ -121,18 +127,21 @@ private:
 class Server : public QNetworkAccessManager
 {
 public:
-    //! Each request's reply: whether it finishes, and whether it fails after sending its data.
-    std::vector<std::pair<bool, bool>> replies;
+    //! Whether each request's reply finishes after sending its data; replies after these stay open.
+    std::vector<bool> finishes;
     std::atomic_int requests{0};
     std::atomic_bool aborted{false};
+    //! The latest reply. Used in the server's thread only.
+    QPointer<WholeBodyReply> lastReply;
 
 protected:
     QNetworkReply* createRequest(Operation /*operation*/, const QNetworkRequest& request,
                                  QIODevice* /*outgoingData*/) override
     {
-        const auto index         = static_cast<size_t>(requests++);
-        const auto [ends, fails] = index < replies.size() ? replies.at(index) : std::pair{false, false};
-        return new WholeBodyReply(request, "0123456789"_ba, ends, fails, &aborted, this);
+        const auto index = static_cast<size_t>(requests++);
+        lastReply = new WholeBodyReply(request, "0123456789"_ba, index < finishes.size() && finishes.at(index),
+                                       &aborted, this);
+        return lastReply;
     }
 };
 
@@ -171,10 +180,12 @@ TEST_F(RangeStreamDeviceTest, ClosingAbortsTheDownloadOfAServerWithoutRanges)
 
 TEST_F(RangeStreamDeviceTest, OpensAgainAfterAFailedDownload)
 {
-    m_server->replies = {{false, true}, {true, false}};
+    m_server->finishes = {false, true};
 
     Subsonic::RangeStreamDevice device{m_server, QUrl{u"http://music.test/rest/stream?id=1"_s}};
     ASSERT_TRUE(device.open(QIODevice::ReadOnly));
+    // The connection drops after the first bytes
+    QMetaObject::invokeMethod(m_server.get(), [this]() { m_server->lastReply->fail(); }, Qt::BlockingQueuedConnection);
     char data[20];
     EXPECT_TRUE(waitFor([&device, &data]() { return device.read(data, sizeof(data)) < 0 || device.atEnd(); }));
     device.close();
