@@ -348,7 +348,8 @@ on every push to `mirage` and on demand, reusing upstream's `build-linux.yml` an
 runs only where SignPath secrets exist, so the fork builds unsigned packages. The installer and portable zip are
 workflow artifacts (`mirage-windows-setup-<arch>`, `mirage-windows-portable-<arch>`); nothing is published as a release.
 Upstream's `build.yml` and clang-format check skip the `mirage` branch; the others only run on release or by hand.
-The audio CD plugin is Linux only, so Windows has no "Rip CD to Server…".
+The audio CD plugin is Linux only, so Windows has no "Rip CD to Server…". The packages carry the MSVC runtime
+(`InstallRequiredSystemLibraries`), because windeployqt does not deploy it and `mirage.exe` does not start without it.
 
 ## Keeping the fork rebased
 
@@ -441,6 +442,14 @@ isolated profile on Xvfb:
 - "Rip CD to Server…" without a disc says that no audio CD was found. A real CD was not tested; the TOC to
   `lookupDisc` mapping is a unit test, and oasis's `lookupDisc` answer for a published TOC parsed as expected.
 
+Verified on 2026-11-02 with the x64 installer from CI, in a Windows 11 LTSC VM, against an isolated oasis master:
+
+- The installer installs silently; `mirage.exe` starts with no VC++ redistributable installed.
+- Adding the server syncs its tracks; a track plays (to SDL's dummy driver, as the VM has no sound device) and its
+  play reaches the server. Without any output device, WASAPI fails with "Failed to initialise audio output".
+- File has "Upload to Server…" and no "Rip CD to Server…"; uploading a two-track folder through the Windows folder
+  dialog commits it and the library shows it.
+
 Limits:
 
 - New playlists go to the default server. Moving a playlist to another server is not supported.
@@ -456,7 +465,7 @@ Limits:
 - An upload resumes only within the dialog's lifetime; closing it cancels the upload.
 - Uploads are one album (or one single) at a time, and `uploadCover` is not used: the server's cover comes from the
   release or the files.
-- The Windows build is not tested on Windows.
+- The Windows arm64 build is not tested on Windows; x64 is (see above).
 - Playlists are read again only after a library sync (at start, or "Scan for changes"), so a playlist the server
   grows (oasis radio) lags until then.
 
