@@ -68,6 +68,7 @@ private:
 
     QSpinBox* m_preloadCount;
     QCheckBox* m_inlineTagEditing;
+    QCheckBox* m_generatedHeaders;
     ColourButton* m_playingRowColour;
     FontButton* m_playingRowFont;
     QCheckBox* m_skipMissing;
@@ -82,6 +83,7 @@ PlaylistGeneralPageWidget::PlaylistGeneralPageWidget(SettingsManager* settings)
     : m_settings{settings}
     , m_preloadCount{new QSpinBox(this)}
     , m_inlineTagEditing{new QCheckBox(tr("Enable inline tag editing"), this)}
+    , m_generatedHeaders{new QCheckBox(tr("Show album headers in autoplaylists, locked and search playlists"), this)}
     , m_playingRowColour{new ColourButton(tr("Background colour") + u":"_s, true, this)}
     , m_playingRowFont{new FontButton(tr("Font") + u":"_s, true, this)}
     , m_skipMissing{new QCheckBox(tr("Skip missing tracks"), this)}
@@ -103,12 +105,15 @@ PlaylistGeneralPageWidget::PlaylistGeneralPageWidget(SettingsManager* settings)
     m_preloadCount->setMinimum(0);
     m_preloadCount->setMaximum(10000);
     m_inlineTagEditing->setToolTip(tr("Allow editing writable track tag columns directly from the playlist"));
+    m_generatedHeaders->setToolTip(
+        tr("Their order comes from a query, a server or a search rather than from albums, so headers split them up"));
 
     int row{0};
     behaviourLayout->addWidget(preloadCountLabel, row, 0);
     behaviourLayout->addWidget(m_preloadCount, row++, 1);
     behaviourLayout->addWidget(new HintLabel(tr("Set to ‘0’ to disable preloading."), this), row++, 0, 1, 2);
     behaviourLayout->addWidget(m_inlineTagEditing, row++, 0, 1, 2);
+    behaviourLayout->addWidget(m_generatedHeaders, row++, 0, 1, 2);
     behaviourLayout->setColumnStretch(behaviourLayout->columnCount(), 1);
 
     m_playingRowColour->setToolTip(
@@ -161,6 +166,7 @@ void PlaylistGeneralPageWidget::load()
 {
     m_preloadCount->setValue(m_settings->value<Settings::Gui::Internal::PlaylistTrackPreloadCount>());
     m_inlineTagEditing->setChecked(m_settings->value<Settings::Gui::Internal::PlaylistInlineTagEditing>());
+    m_generatedHeaders->setChecked(m_settings->value<Settings::Gui::Internal::PlaylistGeneratedHeaders>());
     const QVariant playingRowColour = m_settings->value<Settings::Gui::Internal::PlaylistPlayingRowColour>();
     m_playingRowColour->setChecked(!playingRowColour.isNull());
     m_playingRowColour->setColour(playingRowColour.isNull() ? defaultPlayingRowColour()
@@ -181,6 +187,7 @@ void PlaylistGeneralPageWidget::apply()
 {
     m_settings->set<Settings::Gui::Internal::PlaylistTrackPreloadCount>(m_preloadCount->value());
     m_settings->set<Settings::Gui::Internal::PlaylistInlineTagEditing>(m_inlineTagEditing->isChecked());
+    m_settings->set<Settings::Gui::Internal::PlaylistGeneratedHeaders>(m_generatedHeaders->isChecked());
     if(m_playingRowColour->isChecked()) {
         m_settings->set<Settings::Gui::Internal::PlaylistPlayingRowColour>(m_playingRowColour->colour());
     }
@@ -205,6 +212,7 @@ void PlaylistGeneralPageWidget::reset()
 {
     m_settings->reset<Settings::Gui::Internal::PlaylistTrackPreloadCount>();
     m_settings->reset<Settings::Gui::Internal::PlaylistInlineTagEditing>();
+    m_settings->reset<Settings::Gui::Internal::PlaylistGeneratedHeaders>();
     m_settings->reset<Settings::Gui::Internal::PlaylistPlayingRowColour>();
     m_settings->reset<Settings::Gui::Internal::PlaylistPlayingRowFont>();
     m_settings->reset<Settings::Core::PlaylistSkipMissing>();

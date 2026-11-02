@@ -222,6 +222,7 @@ private:
     [[nodiscard]] bool playingTrackMatchesPlaylistTrack(const PlaylistTrack& track, int index) const;
     [[nodiscard]] PlaylistTrackList tracksWithPlayingTrackOverlay(const PlaylistTrackList& tracks) const;
 
+    [[nodiscard]] bool isGeneratedPlaylist(const Playlist* playlist) const;
     PlaylistPopulationRequest populationRequest();
     void populateModel(PendingData data);
     void populateTrackGroup(PendingData data);

@@ -2156,6 +2156,7 @@ void PlaylistWidget::setupConnections()
 
     m_settings->subscribe<Settings::Core::UseVariousForCompilations>(
         this, [this]() { m_session->changePlaylist(sessionHost(), m_playlistController->currentPlaylist(), nullptr); });
+    m_settings->subscribe<PlaylistGeneratedHeaders>(this, [this]() { resetModelThrottled(); });
     m_settings->subscribe<PlaylistInlineTagEditing>(this, [this]() {
         const Playlist* currentPlaylist = m_playlistController->currentPlaylist();
 

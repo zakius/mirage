@@ -19,6 +19,7 @@
 
 #include "playlistmodel.h"
 
+#include "filters/filtercontroller.h"
 #include "internalguisettings.h"
 #include "playlistitem.h"
 #include "playlistpopulator.h"
@@ -2046,6 +2047,15 @@ PlaylistTrackList PlaylistModel::tracksWithPlayingTrackOverlay(const PlaylistTra
     return displayTracks;
 }
 
+bool PlaylistModel::isGeneratedPlaylist(const Playlist* playlist) const
+{
+    // Their order comes from a query, a server or a search, not from albums, so album headers only break them up
+    return playlist
+        && (playlist->isAutoPlaylist() || playlist->isLocked() || playlist->isTemporary()
+            || playlist->name() == m_settings->value<Settings::Gui::SearchPlaylistName>()
+            || playlist->name() == Filters::FilterController::defaultPlaylistName());
+}
+
 PlaylistPopulationRequest PlaylistModel::populationRequest()
 {
     Q_ASSERT(QThread::currentThread() == thread());
@@ -2056,6 +2066,11 @@ PlaylistPopulationRequest PlaylistModel::populationRequest()
     request.playlistId     = m_currentPlaylist ? m_currentPlaylist->id() : UId{};
     request.trackCount     = m_currentPlaylist ? m_currentPlaylist->trackCount() : 0;
     request.preset         = m_currentPreset;
+    if(!m_settings->value<Settings::Gui::Internal::PlaylistGeneratedHeaders>()
+       && isGeneratedPlaylist(m_currentPlaylist)) {
+        request.preset.header     = {};
+        request.preset.subHeaders = {};
+    }
     request.columns        = m_columns;
     request.font           = playlistFont();
     request.preloadCount   = m_settings->value<Settings::Gui::Internal::PlaylistTrackPreloadCount>();

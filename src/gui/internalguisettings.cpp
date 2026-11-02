@@ -218,6 +218,7 @@ GuiSettings::GuiSettings(SettingsManager* settingsManager)
     m_settings->createSetting<DragOnlyAfterSelect>(true, u"Interface/DragOnlyAfterSelect"_s);
     m_settings->createSetting<Internal::PlaylistTrackPreloadCount>(2000, u"Playlist/TrackPreloadCount"_s);
     m_settings->createSetting<Internal::PlaylistInlineTagEditing>(false, u"PlaylistWidget/InlineTagEditing"_s);
+    m_settings->createSetting<Internal::PlaylistGeneratedHeaders>(false, u"PlaylistWidget/GeneratedPlaylistHeaders"_s);
     m_settings->createSetting<Internal::PlaylistInlineEditDelayMs>(600, u"PlaylistWidget/InlineEditDelayMs"_s);
     m_settings->createSetting<Internal::ContextMenuTrackDisabledSections>(
         QStringList{QString::fromLatin1(Constants::Actions::CopyLocation),
