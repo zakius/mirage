@@ -23,6 +23,7 @@
 
 #include <core/track.h>
 #include <utils/fileutils.h>
+#include <utils/mirage.h>
 #include <utils/stringutils.h>
 #include <utils/utils.h>
 
@@ -57,6 +58,30 @@ QString parentKey(ItemParent parent)
             return u"Other"_s;
     }
     return {};
+}
+} // namespace
+
+namespace {
+//! Marks the album and artists of a server song, which can be starred, with a filled or an empty star.
+QStringList withStar(const Track& track, const QString& field, QStringList values)
+{
+    const bool album = field.compare("album"_L1, Qt::CaseInsensitive) == 0;
+    if(!album && field.compare("artist"_L1, Qt::CaseInsensitive) != 0
+       && field.compare("albumartist"_L1, Qt::CaseInsensitive) != 0) {
+        return values;
+    }
+    const bool starrable = album ? track.hasExtraTag(QString::fromLatin1(Mirage::AlbumIdTag))
+                                 : track.hasExtraTag(QString::fromLatin1(Mirage::ArtistIdTag))
+                                       || track.hasExtraTag(QString::fromLatin1(Mirage::AlbumArtistIdTag));
+    if(!starrable) {
+        return values;
+    }
+    const bool starred
+        = track.hasExtraTag(QString::fromLatin1(album ? Mirage::AlbumStarredTag : Mirage::ArtistStarredTag));
+    for(QString& value : values) {
+        value += starred ? u" ★"_s : u" ☆"_s;
+    }
+    return values;
 }
 } // namespace
 
@@ -182,7 +207,7 @@ void InfoPopulatorPrivate::addTrackMetadata(const Track& track, bool extended,
         }
 
         checkAddEntryNode(u"Metadata/%1"_s.arg(field.scriptField.toUpper()), field.name, ItemParent::Metadata,
-                          track.metaValues(field.scriptField));
+                          withStar(track, field.scriptField, track.metaValues(field.scriptField)));
     }
 
     if(extended) {

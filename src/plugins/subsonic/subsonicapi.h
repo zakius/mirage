@@ -21,6 +21,7 @@
 
 #include <core/scripting/displayname.h>
 #include <core/track.h>
+#include <utils/mirage.h>
 
 #include <QJsonObject>
 #include <QNetworkRequest>
@@ -43,13 +44,11 @@ using Scripting::ArtistLatinTag;
 using Scripting::TitleLatinTag;
 using Scripting::TrackArtistLatinTag;
 
-//! Extra tags with the server ids of a song's album, artist and album artists (OpenSubsonic `albumArtists`).
-constexpr auto AlbumIdTag       = "SUBSONIC_ALBUMID";
-constexpr auto ArtistIdTag      = "SUBSONIC_ARTISTID";
-constexpr auto AlbumArtistIdTag = "SUBSONIC_ALBUMARTISTID";
-//! Extra tags set to "1" on songs whose album, or album artist, the user starred.
-constexpr auto AlbumStarredTag  = "ALBUMSTARRED";
-constexpr auto ArtistStarredTag = "ARTISTSTARRED";
+using Mirage::AlbumArtistIdTag;
+using Mirage::AlbumIdTag;
+using Mirage::AlbumStarredTag;
+using Mirage::ArtistIdTag;
+using Mirage::ArtistStarredTag;
 
 struct Account
 {

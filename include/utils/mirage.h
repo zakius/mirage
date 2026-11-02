@@ -45,4 +45,12 @@ constexpr auto ShortcutFollowsVisibility = "fyShortcutFollowsVisibility";
  */
 FYUTILS_EXPORT void setDiscRipper(QObject* ripper);
 [[nodiscard]] FYUTILS_EXPORT QObject* discRipper();
+
+//! Extra tags of Subsonic songs: the server ids of their album, artist and album artists (OpenSubsonic `albumArtists`).
+constexpr auto AlbumIdTag       = "SUBSONIC_ALBUMID";
+constexpr auto ArtistIdTag      = "SUBSONIC_ARTISTID";
+constexpr auto AlbumArtistIdTag = "SUBSONIC_ALBUMARTISTID";
+//! Extra tags set to "1" on songs whose album, or album artist, the user starred.
+constexpr auto AlbumStarredTag  = "ALBUMSTARRED";
+constexpr auto ArtistStarredTag = "ARTISTSTARRED";
 } // namespace Fooyin::Mirage
