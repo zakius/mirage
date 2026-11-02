@@ -21,7 +21,7 @@ jobs:
             runner: ubuntu-24.04-arm
     runs-on: ${{ matrix.runner }}
     container:
-      image: ghcr.io/flathub-infra/flatpak-github-actions:kde-6.10
+      image: ghcr.io/flathub-infra/flatpak-github-actions:kde-6.11
       options: --privileged
     steps:
       - name: Checkout
@@ -44,7 +44,7 @@ jobs:
         shell: bash
         run: |
           version="$(awk '$1 == "VERSION" { print $2; exit }' CMakeLists.txt)${FOOYIN_VERSION_SUFFIX}"
-          echo "name=fooyin-${version}-${{ matrix.arch }}.flatpak" >> "$GITHUB_OUTPUT"
+          echo "name=mirage-${version}-${{ matrix.arch }}.flatpak" >> "$GITHUB_OUTPUT"
 
       - name: Set version suffix
         if: inputs.version_suffix != ''
@@ -52,14 +52,14 @@ jobs:
           FOOYIN_VERSION_SUFFIX: ${{ inputs.version_suffix }}
         shell: bash
         run: |
-          sed -i "/- -DBUILD_PCH=ON/a\\      - -DFOOYIN_VERSION_SUFFIX=${FOOYIN_VERSION_SUFFIX}" \
-            dist/linux/flatpak/org.fooyin.fooyin.yaml
+          sed -i "/- -DBUILD_PCH=OFF/a\\      - -DFOOYIN_VERSION_SUFFIX=${FOOYIN_VERSION_SUFFIX}" \
+            dist/linux/flatpak/io.github.zakius.mirage.yaml
 
       - name: Build Flatpak
         uses: flatpak/flatpak-github-actions/flatpak-builder@v6
         with:
           bundle: ${{ steps.flatpak-bundle.outputs.name }}
-          manifest-path: dist/linux/flatpak/org.fooyin.fooyin.yaml
+          manifest-path: dist/linux/flatpak/io.github.zakius.mirage.yaml
           cache-key: ${{ steps.flatpak-cache.outputs.key }}
           arch: ${{ matrix.arch }}
           upload-artifact: false
@@ -121,5 +121,5 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
-          name: flatpak-${{ matrix.arch }}
+          name: mirage-flatpak-${{ matrix.arch }}
           path: ${{ steps.flatpak-bundle.outputs.name }}

@@ -24,3 +24,7 @@ jobs:
     name: Build Windows
     uses: ./.github/workflows/build-windows.yml
     secrets: inherit
+
+  flatpak:
+    name: Build Flatpak
+    uses: ./.github/workflows/build-flatpak.yml

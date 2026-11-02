@@ -384,6 +384,12 @@ on every push to `mirage` and on demand, reusing upstream's `build-linux.yml` an
 runs only where SignPath secrets exist, so the fork builds unsigned packages. The installer and portable zip are
 workflow artifacts (`mirage-windows-setup-<arch>`, `mirage-windows-portable-<arch>`); nothing is published as a release.
 Upstream's `build.yml` and clang-format check skip the `mirage` branch; the others only run on release or by hand.
+It also builds a Flatpak bundle for x86_64 and aarch64 (`build-flatpak.yml` with
+`dist/linux/flatpak/io.github.zakius.mirage.yaml`, on the KDE 6.11 runtime), uploaded as `mirage-flatpak-<arch>`. The
+Flatpak has network, PulseAudio and PipeWire, Wayland with X11 as fallback, the MPRIS name
+`org.mpris.MediaPlayer2.mirage`, all devices (for the CD ripper, which libcdio and libcdio-paranoia are built for), the
+tray (`org.kde.StatusNotifierWatcher`) and the Discord IPC socket, and no access to music folders or removable media:
+files to upload come through the file chooser portal. The desktop file's `Exec` takes no files.
 The audio CD plugin is Linux only, so Windows has no "Rip CD to Server…". The packages carry the MSVC runtime
 (`InstallRequiredSystemLibraries`), because windeployqt does not deploy it and `mirage.exe` does not start without it.
 
