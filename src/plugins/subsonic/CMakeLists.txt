@@ -12,6 +12,8 @@ create_fooyin_plugin_internal(
         subsonicpage.cpp
         subsonicpage.h
         subsonicplugin.cpp
+        subsonicplaylists.cpp
+        subsonicplaylists.h
         subsonicplugin.h
         subsonicprovider.cpp
         subsonicprovider.h

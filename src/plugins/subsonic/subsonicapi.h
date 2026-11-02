@@ -76,6 +76,10 @@ using ResponseCallback = std::function<void(std::optional<QJsonObject> response,
 //! Calls the API @p method and invokes @p callback in the thread of @p context.
 QNetworkReply* request(QNetworkAccessManager* network, const Account& account, const QString& method,
                        const QUrlQuery& params, QObject* context, ResponseCallback callback);
+//! Calls the API @p method like request(), with the parameters and authentication as a form in the body (OpenSubsonic
+//! extension `formPost`), so they can be longer than a URL allows.
+QNetworkReply* postForm(QNetworkAccessManager* network, const Account& account, const QString& method,
+                        const QUrlQuery& params, QObject* context, ResponseCallback callback);
 //! POSTs @p body to the API @p method, with the authentication in the query, like request().
 QNetworkReply* post(QNetworkAccessManager* network, const Account& account, const QString& method,
                     const QUrlQuery& params, const QByteArray& body, QObject* context, ResponseCallback callback);

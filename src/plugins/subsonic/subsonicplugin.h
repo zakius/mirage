@@ -27,18 +27,12 @@
 #include <gui/plugins/guiplugin.h>
 #include <utils/id.h>
 
-#include <QTimer>
-
-#include <map>
-#include <set>
-
 class QAction;
 class QMenu;
 
 namespace Fooyin {
 class AudioLoader;
 class NetworkAccessManager;
-class Playlist;
 }
 
 namespace Fooyin::Subsonic {
@@ -72,14 +66,6 @@ private:
     UploadDialog* createUploadDialog(const QString& libraryPath);
     void scrobble(const Track& track, bool submission);
     void writeStats(const TrackList& tracks, Track::Stats stats);
-    void syncPlaylists(const QString& libraryPath);
-    void playlistEdited(Playlist* playlist);
-    void playlistRemoved(const Playlist* playlist);
-    void pushPlaylists();
-    void deletePlaylist(const QString& key);
-    [[nodiscard]] std::optional<QString> defaultServer() const;
-    void uploadPlaylist(Playlist* playlist);
-    void linkPlaylist(const UId& id, const QString& server, const QString& serverId);
 
     LibraryManager* m_libraryManager{nullptr};
     MusicLibrary* m_library{nullptr};
@@ -93,16 +79,5 @@ private:
     NameDisplayPage* m_nameDisplayPage{nullptr};
     //! View > Names and Lyrics, owned by the View menu.
     QMenu* m_nameDisplayMenu{nullptr};
-    std::set<QString> m_pendingPlaylistSyncs;
-    //! Mirrored playlists edited locally and not yet saved on the server, with a count of their edits.
-    std::map<QString, int> m_dirtyPlaylists;
-    //! Mirrored playlists being sent to the server.
-    std::set<QString> m_pushingPlaylists;
-    //! Mirrored playlists removed locally and not yet deleted on the server.
-    std::set<QString> m_pendingDeletes;
-    QTimer m_pushTimer;
-    //! Playlists being created on the server.
-    std::set<UId> m_uploadingPlaylists;
-    bool m_applyingServerChanges{false};
 };
 } // namespace Fooyin::Subsonic

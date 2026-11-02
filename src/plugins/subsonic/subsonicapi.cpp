@@ -263,6 +263,27 @@ QNetworkReply* post(QNetworkAccessManager* network, const Account& account, cons
     return reply;
 }
 
+QNetworkReply* postForm(QNetworkAccessManager* network, const Account& account, const QString& method,
+                        const QUrlQuery& params, QObject* context, ResponseCallback callback)
+{
+    QUrl url = apiUrl(account, method, params);
+    // Encoded by hand, because QUrlQuery leaves "+", which a form reads as a space
+    QByteArray body;
+    for(const auto& [key, value] : QUrlQuery{url}.queryItems(QUrl::FullyDecoded)) {
+        if(!body.isEmpty()) {
+            body.append('&');
+        }
+        body.append(QUrl::toPercentEncoding(key) + '=' + QUrl::toPercentEncoding(value));
+    }
+    url.setQuery(QString{});
+
+    QNetworkRequest networkRequest = apiRequest(url);
+    networkRequest.setHeader(QNetworkRequest::ContentTypeHeader, u"application/x-www-form-urlencoded"_s);
+    auto* reply = network->post(networkRequest, body);
+    handleReply(reply, context, std::move(callback));
+    return reply;
+}
+
 QString replyError(const QNetworkReply* reply)
 {
     const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();

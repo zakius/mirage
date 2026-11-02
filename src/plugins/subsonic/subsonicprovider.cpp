@@ -253,6 +253,7 @@ void SubsonicProvider::removeAccount(const QString& libraryPath)
     m_accounts.erase(libraryPath);
     m_serverScrobbles.erase(libraryPath);
     m_romanization.erase(libraryPath);
+    m_formPost.erase(libraryPath);
     m_uploadExtension.erase(libraryPath);
     m_uploadRole.erase(libraryPath);
 }
@@ -302,6 +303,12 @@ void SubsonicProvider::fetchServerInfo(const QString& libraryPath, const Account
                  else {
                      m_romanization.erase(libraryPath);
                  }
+                 if(response && hasExtension(*response, u"formPost"_s, 1)) {
+                     m_formPost.emplace(libraryPath);
+                 }
+                 else {
+                     m_formPost.erase(libraryPath);
+                 }
                  if(response && hasExtension(*response, u"upload"_s, 1)) {
                      m_uploadExtension.emplace(libraryPath);
                  }
@@ -327,6 +334,13 @@ bool SubsonicProvider::hasRomanization(const QString& path) const
     return m_romanization.contains(libraryPath);
 }
 
+bool SubsonicProvider::hasFormPost(const QString& path) const
+{
+    const QString libraryPath = libraryPathFor(path);
+    const std::scoped_lock lock{m_mutex};
+    return m_formPost.contains(libraryPath);
+}
+
 bool SubsonicProvider::canUpload(const QString& path) const
 {
     const QString libraryPath = libraryPathFor(path);
@@ -342,6 +356,18 @@ void SubsonicProvider::call(const QString& path, const QString& method, const QU
     }
     else {
         callback({}, {.message = tr("No account for %1").arg(path)});
+    }
+}
+
+void SubsonicProvider::callForm(const QString& path, const QString& method, const QUrlQuery& params,
+                                ResponseCallback callback)
+{
+    const auto account = accountForPath(path);
+    if(account && hasFormPost(path)) {
+        postForm(m_network.get(), *account, method, params, this, std::move(callback));
+    }
+    else {
+        call(path, method, params, std::move(callback));
     }
 }
 

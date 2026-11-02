@@ -230,6 +230,12 @@ Subsonic API documentation.
   playlist, matched by a `SubsonicPlaylist` extra property, and is created, renamed, replaced or removed to match.
   Edits in fooyin go back to the server one second after the last change: track changes through `createPlaylist` with
   `playlistId` (which replaces the entries), renames through `updatePlaylist`, and removal through `deletePlaylist`.
+  Song ids go in a form POST where the server lists the OpenSubsonic `formPost` extension; otherwise the first 100 go
+  with `createPlaylist` and the rest through `updatePlaylist`'s `songIdToAdd`, 100 per request, so long playlists fit
+  in URLs. Entries that leave a playlist because their tracks left the library (removing a server, "Remove unavailable
+  tracks") are not edits. A removed server's account is dropped before its tracks, its playlists stay as local copies,
+  and edits not yet sent to it are dropped, so adding it again shows its state. A removed playlist that is restored
+  (undo) is created on the server again. A sync leaves alone playlists linked while it was running.
   A playlist with edits the server has not saved is marked with a `SubsonicUnsaved` extra property, so the mark
   survives a restart. A sync does not overwrite it, and the push is retried after the next sync. Removals that fail are
   retried on the next sync in the same session. When a sync applies the server's entries, entries the server cannot
@@ -237,8 +243,8 @@ Subsonic API documentation.
   oasis's radio tracks) are kept as they are, so a push sends them back. Changes that only refresh the metadata of
   entries, as after a sync, are not edits. The last write wins. Removing a mirrored playlist asks for confirmation
   (unless turned off), and the dialog says that the server copy is deleted too.
-- **Read-only playlists.** A playlist the server marks `readonly` (OpenSubsonic), or one owned by another user, gets a
-  `SubsonicReadOnly` extra property and is locked in fooyin. Edits to it are not sent, and removing it only removes the
+- **Read-only playlists.** A playlist the server marks `readonly` (OpenSubsonic), or one owned by another user (user
+  names compared without case), gets a `SubsonicReadOnly` extra property and is locked in fooyin. Edits to it are not sent, and removing it only removes the
   fooyin copy, which comes back on the next sync. If the server refuses a push for good (error 50 or 70), the edits
   are dropped and the server's copy is applied again.
 - **New playlists.** Every new normal playlist is created on the default server (the Subsonic library with the lowest
