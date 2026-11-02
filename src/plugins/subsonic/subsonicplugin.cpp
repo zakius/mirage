@@ -221,8 +221,14 @@ void SubsonicPlugin::initialise(const GuiPluginContext& context)
             album ? tr("Star Album") : tr("Star Artist"),
             [this, album](QMenu* menu, const TrackSelection& selection) {
                 const QString server = selectionServer(selection.tracks);
+                // Playlists keep the copies they loaded, which may predate the sync that stored the ids
+                TrackList tracks;
+                std::ranges::transform(selection.tracks, std::back_inserter(tracks), [this](const Track& track) {
+                    const Track libraryTrack = m_library->trackForId(track.id());
+                    return libraryTrack.isValid() ? libraryTrack : track;
+                });
                 QStringList ids;
-                for(const Track& track : selection.tracks) {
+                for(const Track& track : tracks) {
                     ids.append(album ? track.extraTag(QString::fromLatin1(AlbumIdTag)) : artistIds(track));
                 }
                 ids.removeDuplicates();
@@ -231,9 +237,8 @@ void SubsonicPlugin::initialise(const GuiPluginContext& context)
                 }
 
                 const char* tag     = album ? AlbumStarredTag : ArtistStarredTag;
-                const bool starred  = std::ranges::all_of(selection.tracks, [tag](const Track& track) {
-                    return track.hasExtraTag(QString::fromLatin1(tag));
-                });
+                const bool starred  = std::ranges::all_of(
+                    tracks, [tag](const Track& track) { return track.hasExtraTag(QString::fromLatin1(tag)); });
                 const bool several  = ids.size() > 1;
                 const QString title = album ? (starred ? (several ? tr("Unstar Albums") : tr("Unstar Album"))
                                                        : (several ? tr("Star Albums") : tr("Star Album")))
