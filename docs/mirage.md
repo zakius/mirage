@@ -267,7 +267,8 @@ Subsonic API documentation.
 - **Upload and CD rip.** For servers listing the OpenSubsonic extension `upload` v1 (the spec is oasis's
   `docs/upload-extension.md`) whose `getUser` gives the user `uploadRole`, both asked when an account loads, is saved
   and syncs. On every other server the actions do not exist: File > "Upload to Server…" and "Rip CD to Server…" are
-  hidden while no server offers uploads, and the track menu of a server's tracks has "Upload to This Server…" and
+  hidden while no server offers uploads (and so are their entries in Settings > Shortcuts, through the actions'
+  `Mirage::ShortcutFollowsVisibility` property), and the track menu of a server's tracks has "Upload to This Server…" and
   "Rip CD to This Server…" only for such a server. The rip actions also need the audio CD plugin (Linux only).
   - *Upload* opens a dialog: pick the server, add files or a folder (FLAC, Opus, MP3, M4A and Ogg; other files are
     skipped with a note). This is the only place mirage reads local media. Their tags, read with fooyin's tag readers,
@@ -303,7 +304,7 @@ code stays, so rebasing on fooyin stays cheap and a feature comes back by removi
 
 - **The gate.** `Mirage::isLocalMediaId()` (`utils/mirage.h`) lists the ids of actions, track menu entries, settings
   pages and widgets for local media. `ActionManager::registerAction()` hides those actions, which also turns off their
-  shortcuts; the track context menus and their settings page skip those entries; the settings dialog skips those
+  shortcuts, and Settings > Shortcuts does not list them; the track context menus and their settings page skip those entries; the settings dialog skips those
   pages; and `WidgetProvider` does not offer those widgets. Hidden this way:
   - File: Add files, Add folders, Load playlist, Save playlist, Save all playlists, Open audio CD (cdda)
   - track menus: Open containing folder, Copy file path, Copy directory path, artwork search, extraction, attaching

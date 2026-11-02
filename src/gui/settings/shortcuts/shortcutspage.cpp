@@ -250,6 +250,7 @@ ShortcutsPageWidget::ShortcutsPageWidget(ActionManager* actionManager)
         selectionChanged();
     });
     QObject::connect(m_actionManager, &ActionManager::commandsChanged, this, &ShortcutsPageWidget::repopulateShortcuts);
+    QObject::connect(m_model, &ShortcutsModel::visibilityChanged, this, &ShortcutsPageWidget::repopulateShortcuts);
     QObject::connect(m_actionManager, &ActionManager::globalShortcutManagementChanged, this,
                      &ShortcutsPageWidget::repopulateShortcuts);
     QObject::connect(m_actionManager, &ActionManager::globalShortcutConfigurationAvailabilityChanged, this,

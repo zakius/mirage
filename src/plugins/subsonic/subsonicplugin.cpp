@@ -181,6 +181,7 @@ void SubsonicPlugin::initialise(const GuiPluginContext& context)
 
     m_uploadAction = new QAction(tr("&Upload to Server…"), this);
     m_uploadAction->setStatusTip(tr("Upload local files to a server that accepts uploads"));
+    m_uploadAction->setProperty(Mirage::ShortcutFollowsVisibility, true);
     auto* uploadCommand = context.actionManager->registerAction(m_uploadAction, "Subsonic.Upload");
     uploadCommand->setCategories({tr("File")});
     fileMenu->addAction(uploadCommand, Actions::Groups::One);
@@ -188,6 +189,7 @@ void SubsonicPlugin::initialise(const GuiPluginContext& context)
 
     m_ripAction = new QAction(tr("&Rip CD to Server…"), this);
     m_ripAction->setStatusTip(tr("Rip an audio CD to FLAC and upload it to a server that accepts uploads"));
+    m_ripAction->setProperty(Mirage::ShortcutFollowsVisibility, true);
     auto* ripCommand = context.actionManager->registerAction(m_ripAction, "Subsonic.RipCd");
     ripCommand->setCategories({tr("File")});
     fileMenu->addAction(ripCommand, Actions::Groups::One);

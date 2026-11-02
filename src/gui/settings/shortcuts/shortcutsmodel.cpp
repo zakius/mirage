@@ -21,6 +21,7 @@
 
 #include <utils/actions/actionmanager.h>
 #include <utils/actions/command.h>
+#include <utils/mirage.h>
 
 #include <QBrush>
 #include <QPointer>
@@ -226,6 +227,19 @@ void ShortcutsModel::populate(ActionManager* actionManager)
     for(Command* command : commands) {
         if(command->action() && command->action()->isSeparator()) {
             continue;
+        }
+
+        // mirage: commands hidden in the menus have no shortcut entry either
+        if(Mirage::isLocalMediaId(command->id())) {
+            continue;
+        }
+        if(auto* action = command->actionForContext(Constants::Context::Global);
+           action && action->property(Mirage::ShortcutFollowsVisibility).toBool()) {
+            m_commandConnections.push_back(QObject::connect(action, &QAction::visibleChanged, this,
+                                                            &ShortcutsModel::visibilityChanged, Qt::QueuedConnection));
+            if(!action->isVisible()) {
+                continue;
+            }
         }
 
         ShortcutItem* parent = rootItem();

@@ -34,6 +34,12 @@ namespace Fooyin::Mirage {
 FYUTILS_EXPORT bool isLocalMediaId(const Id& id);
 
 /*!
+ * Set to @c true on an action whose command is listed in Settings > Shortcuts only while the action is visible, such
+ * as an action that exists only for servers offering a feature.
+ */
+constexpr auto ShortcutFollowsVisibility = "fyShortcutFollowsVisibility";
+
+/*!
  * The audio CD plugin registers its ripper here (a `Cdda::DiscRipper`, see `plugins/cdda/cddadiscripper.h`), so the
  * Subsonic plugin can rip a CD to a server without either plugin linking the other. @c nullptr where there is none.
  */

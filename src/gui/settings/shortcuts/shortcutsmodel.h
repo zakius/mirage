@@ -113,6 +113,9 @@ public:
 
 Q_SIGNALS:
     void bindingsSynchronised(Command* command);
+    //! Emitted when a command listed only while its action is visible (Mirage::ShortcutFollowsVisibility) appears or
+    //! goes, so the model is populated again.
+    void visibilityChanged();
 
 private:
     using ConflictMap = std::map<Id, ShortcutConflictList>;
